@@ -1,0 +1,40 @@
+# Rust build artifacts
+/target/
+**/*.rs.bk
+*.pdb
+
+# Profiling and benchmarking output
+flamegraph.svg
+perf.data
+perf.data.old
+/criterion/
+
+# Local save state and runtime storage (do not commit player saves / runtime state)
+/saves/
+/local_state/
+*.save
+*.sav
+*.bak
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.cert
+
+# Editor and OS junk
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Antigravity and scratch
+/scratch/
+.system_generated/
