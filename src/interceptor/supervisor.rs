@@ -1,0 +1,272 @@
+//! Master supervision coordinator integrating task execution, anti-flicker delay,
+//! and two-tier Ctrl+C signal routing.
+
+use std::io::{self, stdout, Write};
+use std::thread;
+use std::time::{Duration, Instant};
+
+use crossterm::event::{Event, KeyCode, KeyModifiers};
+
+use crate::game::state::{GameInput, GameState};
+use crate::interceptor::history::DurationHistory;
+use crate::interceptor::matcher::match_command;
+use crate::interceptor::process::ProcessSupervisor;
+use crate::interceptor::transition::run_completion_transition;
+use crate::storage::manager::SaveManager;
+use crate::storage::schema::ActiveRunSnapshot;
+use crate::storage::workshop::apply_workshop_to_game;
+use crate::terminal::engine::Engine;
+use crate::terminal::guard::TerminalGuard;
+
+/// Runs an eligible developer task, supervising execution and presenting gameplay during wait time.
+/// Returns the exit code of the child process.
+pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
+    if args.is_empty() {
+        return Ok(0);
+    }
+
+    let save_manager = SaveManager::default_paths();
+    let mut save_state = save_manager.load().unwrap_or_default();
+
+    let matched_class = match_command(args);
+
+    let history_path = save_manager.data_dir().join("history.json");
+    let mut history = DurationHistory::load_from_file(&history_path);
+
+    let is_predicted_long = matched_class
+        .map(|c| history.is_predicted_long(c))
+        .unwrap_or(false);
+
+    let start_time = Instant::now();
+
+    // Spawn child process
+    let mut supervisor = ProcessSupervisor::spawn(args)?;
+
+    let anti_flicker_delay = if is_predicted_long {
+        Duration::from_millis(150)
+    } else {
+        Duration::from_millis(save_state.settings.anti_flicker_delay_ms)
+    };
+
+    // Phase 1: Anti-flicker observation period
+    let observation_start = Instant::now();
+    while observation_start.elapsed() < anti_flicker_delay {
+        if let Some(status) = supervisor.try_wait()? {
+            // Task completed quickly! Zero game flicker.
+            print_buffered_logs(&supervisor);
+            let duration_secs = start_time.elapsed().as_secs_f32();
+            if let Some(class) = matched_class {
+                history.record(class, duration_secs);
+                let _ = history.save_to_file(&history_path);
+            }
+            return Ok(status
+                .code()
+                .unwrap_or(if status.success() { 0 } else { 1 }));
+        }
+        thread::sleep(Duration::from_millis(15));
+    }
+
+    // Phase 2: Enter Game View
+    let guard = TerminalGuard::enter()?;
+    let mut engine = Engine::new()?;
+
+    // Load or initialize gameplay session
+    let mut game = GameState::new(engine.width(), engine.height(), rand_seed());
+    apply_workshop_to_game(&save_state.workshop, &mut game);
+
+    // If an active run snapshot exists, resume it
+    if let Some(ref snapshot) = save_state.active_run {
+        resume_snapshot(&mut game, snapshot);
+    }
+
+    let initial_xp = game.player.xp;
+    let initial_shards = game.player.shards;
+
+    let target_frame_duration = Duration::from_millis(38); // ~26 FPS
+    let mut last_frame = Instant::now();
+    let mut input = GameInput::default();
+    let mut left_game_view = false;
+
+    let child_exit_status = loop {
+        // Check if child process has finished
+        if let Some(status) = supervisor.try_wait()? {
+            break status;
+        }
+
+        // Handle user input
+        while let Some(ev) = Engine::poll_event(Duration::from_millis(0))? {
+            match ev {
+                // FIRST Ctrl+C: leaves game view immediately without killing child task!
+                Event::Key(k)
+                    if k.modifiers.contains(KeyModifiers::CONTROL)
+                        && k.code == KeyCode::Char('c') =>
+                {
+                    left_game_view = true;
+                    break;
+                }
+                Event::Key(k) if k.code == KeyCode::Esc || k.code == KeyCode::Char('q') => {
+                    left_game_view = true;
+                    break;
+                }
+                Event::Key(k) => {
+                    if game.pending_level_up {
+                        if let Some(ref mut draft) = game.current_draft {
+                            match k.code {
+                                KeyCode::Up => draft.select_prev(),
+                                KeyCode::Down => draft.select_next(),
+                                KeyCode::Enter => {
+                                    let sel = draft.current_selection();
+                                    game.apply_upgrade(sel);
+                                }
+                                _ => {}
+                            }
+                        }
+                    } else {
+                        match k.code {
+                            KeyCode::Up | KeyCode::Char('w') => input.move_y = -1.0,
+                            KeyCode::Down | KeyCode::Char('s') => input.move_y = 1.0,
+                            KeyCode::Left | KeyCode::Char('a') => input.move_x = -1.0,
+                            KeyCode::Right | KeyCode::Char('d') => input.move_x = 1.0,
+                            _ => {}
+                        }
+                    }
+                }
+                Event::Resize(w, h) => {
+                    let _ = engine.check_resize();
+                    game.arena = crate::game::arena::Arena::new(w, h);
+                }
+                _ => {}
+            }
+        }
+
+        if left_game_view {
+            break supervisor.wait()?;
+        }
+
+        // Tick simulation
+        let now = Instant::now();
+        let dt = (now - last_frame).as_secs_f32().min(0.1);
+        last_frame = now;
+
+        game.update(dt, input);
+        // Reset single-frame input impulses
+        input = GameInput::default();
+
+        // Render frame
+        if engine.is_too_small() {
+            engine.render_too_small_notice();
+        } else {
+            game.render(engine.buffer_mut());
+        }
+        engine.flush()?;
+
+        // Frame timing limiter
+        let elapsed = last_frame.elapsed();
+        if elapsed < target_frame_duration {
+            thread::sleep(target_frame_duration - elapsed);
+        }
+    };
+
+    // Calculate progression earned during wait time
+    let xp_gained = game.player.xp.saturating_sub(initial_xp);
+    let shards_gained = game.player.shards.saturating_sub(initial_shards);
+    let total_duration = start_time.elapsed().as_secs();
+
+    // Persist career stats and active run
+    save_state.total_play_time_secs += game.run_duration as u64;
+    save_state.total_wait_time_saved_secs += total_duration;
+    save_state.total_enemies_killed += game.enemies_killed;
+    save_state.currency_shards += shards_gained;
+
+    if game.is_game_over {
+        save_state.active_run = None;
+    } else {
+        save_state.active_run = Some(create_snapshot(&game));
+    }
+    let _ = save_manager.save(&save_state);
+
+    if !left_game_view {
+        // Run short transition animation
+        run_completion_transition(
+            &mut engine,
+            child_exit_status.success(),
+            xp_gained,
+            shards_gained,
+        );
+    }
+
+    // Drop terminal guard cleanly to restore normal terminal screen and cooked mode
+    drop(guard);
+
+    // Print buffered child output to normal terminal
+    print_buffered_logs(&supervisor);
+
+    // If user pressed Ctrl+C to leave game view, now enter live task view
+    if left_game_view && !child_exit_status.success() {
+        // Child might have already been waited
+    }
+
+    // Record timing history
+    if let Some(class) = matched_class {
+        history.record(class, total_duration as f32);
+        let _ = history.save_to_file(&history_path);
+    }
+
+    Ok(child_exit_status
+        .code()
+        .unwrap_or(if child_exit_status.success() { 0 } else { 1 }))
+}
+
+fn print_buffered_logs(supervisor: &ProcessSupervisor) {
+    let lines = supervisor.output.drain_lines();
+    if !lines.is_empty() {
+        let mut out = stdout();
+        for line in lines {
+            let _ = writeln!(out, "{}", line);
+        }
+        let _ = out.flush();
+    }
+}
+
+fn rand_seed() -> u64 {
+    use std::time::SystemTime;
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(0xdeadbeef12345678)
+}
+
+fn create_snapshot(game: &GameState) -> ActiveRunSnapshot {
+    ActiveRunSnapshot {
+        player_hp: game.player.hp,
+        player_max_hp: game.player.max_hp,
+        player_x: game.player.x,
+        player_y: game.player.y,
+        player_level: game.player.level,
+        player_xp: game.player.xp,
+        shards_collected: game.player.shards,
+        weapon_damage: game.weapon.damage,
+        weapon_cooldown: game.weapon.cooldown,
+        weapon_multishot: game.weapon.multishot,
+        weapon_piercing: game.weapon.piercing,
+        wave: game.wave,
+        run_duration: game.run_duration,
+        seed: rand_seed(),
+    }
+}
+
+fn resume_snapshot(game: &mut GameState, snap: &ActiveRunSnapshot) {
+    game.player.hp = snap.player_hp;
+    game.player.max_hp = snap.player_max_hp;
+    game.player.x = snap.player_x;
+    game.player.y = snap.player_y;
+    game.player.level = snap.player_level;
+    game.player.xp = snap.player_xp;
+    game.player.shards = snap.shards_collected;
+    game.weapon.damage = snap.weapon_damage;
+    game.weapon.cooldown = snap.weapon_cooldown;
+    game.weapon.multishot = snap.weapon_multishot;
+    game.weapon.piercing = snap.weapon_piercing;
+    game.wave = snap.wave;
+    game.run_duration = snap.run_duration;
+}
