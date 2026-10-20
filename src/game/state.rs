@@ -3,6 +3,7 @@
 use crate::game::arena::Arena;
 use crate::game::enemies::{Enemy, EnemyKind};
 use crate::game::player::Player;
+use crate::game::upgrades::{UpgradeDraft, UpgradeKind};
 use crate::game::weapons::{Projectile, Weapon};
 use crate::terminal::buffer::{Buffer, Color, Style};
 
@@ -91,6 +92,7 @@ pub struct GameState {
     pub boss_spawned: bool,
     pub is_game_over: bool,
     pub pending_level_up: bool,
+    pub current_draft: Option<UpgradeDraft>,
     pub rng: FastRng,
 }
 
@@ -117,12 +119,43 @@ impl GameState {
             boss_spawned: false,
             is_game_over: false,
             pending_level_up: false,
+            current_draft: None,
             rng: FastRng::new(seed),
         }
     }
 
     pub fn is_game_over(&self) -> bool {
         self.is_game_over
+    }
+
+    /// Applies a selected in-run upgrade to player or weapon stats.
+    pub fn apply_upgrade(&mut self, upgrade: UpgradeKind) {
+        match upgrade {
+            UpgradeKind::DamageBoost => {
+                self.weapon.damage *= 1.25;
+            }
+            UpgradeKind::FireRateBoost => {
+                self.weapon.cooldown = (self.weapon.cooldown * 0.8).max(0.08);
+            }
+            UpgradeKind::MoveSpeed => {
+                self.player.speed *= 1.20;
+            }
+            UpgradeKind::Multishot => {
+                self.weapon.multishot += 1;
+            }
+            UpgradeKind::Piercing => {
+                self.weapon.piercing += 1;
+            }
+            UpgradeKind::MaxHealth => {
+                self.player.max_hp += 30.0;
+                self.player.heal(30.0);
+            }
+            UpgradeKind::MagnetRange => {
+                self.player.magnet_radius *= 1.5;
+            }
+        }
+        self.pending_level_up = false;
+        self.current_draft = None;
     }
 
     /// Advances the simulation by `dt` seconds.
@@ -317,6 +350,7 @@ impl GameState {
                     self.player.shards += gem.value;
                 } else if self.player.add_xp(gem.value) {
                     self.pending_level_up = true;
+                    self.current_draft = Some(UpgradeDraft::generate(&mut self.rng));
                 }
                 self.gems.swap_remove(k);
             } else if dist_sq < magnet_sq {
@@ -437,6 +471,9 @@ impl GameState {
         // 8. Game over banner if fallen
         if self.is_game_over {
             self.render_game_over(buf);
+        } else if let Some(ref draft) = self.current_draft {
+            // Render level up upgrade selection modal
+            draft.render_modal(buf);
         }
     }
 
