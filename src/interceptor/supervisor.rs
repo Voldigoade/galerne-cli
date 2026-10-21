@@ -57,10 +57,12 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
         }
     };
 
+    let project_id =
+        crate::interceptor::project::resolve_current_project_id(save_manager.data_dir());
     let history_path = save_manager.data_dir().join("history.json");
     let mut history = DurationHistory::load_from_file(&history_path);
 
-    let is_predicted_long = history.is_predicted_long(matched_class);
+    let decision = history.evaluate_decision(&project_id, matched_class);
 
     let start_time = Instant::now();
 
@@ -70,11 +72,7 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
     // Spawn child process
     let mut supervisor = ProcessSupervisor::spawn(args)?;
 
-    let anti_flicker_delay = if is_predicted_long {
-        Duration::from_millis(150)
-    } else {
-        Duration::from_millis(save_state.settings.anti_flicker_delay_ms)
-    };
+    let anti_flicker_delay = Duration::from_millis(decision.effective_delay_ms());
 
     // Phase 1: Anti-flicker observation period
     let observation_start = Instant::now();
@@ -83,7 +81,7 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
             // Task completed quickly! Zero game flicker.
             print_buffered_logs(&supervisor);
             let duration_secs = start_time.elapsed().as_secs_f32();
-            history.record(matched_class, duration_secs);
+            history.record(&project_id, matched_class, duration_secs);
             let _ = history.save_to_file(&history_path);
             return Ok(status
                 .code()
@@ -229,7 +227,7 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
         // Print buffered child logs
         print_buffered_logs(&supervisor);
 
-        history.record(matched_class, total_duration as f32);
+        history.record(&project_id, matched_class, total_duration as f32);
         let _ = history.save_to_file(&history_path);
 
         return Ok(status
@@ -246,6 +244,7 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
     // Enter Task View: live streaming until child finishes or second Ctrl+C arrives
     signal::reset();
 
+    let mut was_cancelled = false;
     let exit_status = loop {
         // Check if child has terminated
         if let Some(status) = supervisor.try_wait()? {
@@ -255,6 +254,7 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
 
         // Check for second Ctrl+C in task view
         if signal::is_interrupted() {
+            was_cancelled = true;
             let _ = supervisor.send_interrupt();
             let status = supervisor.wait()?;
             print_buffered_logs(&supervisor);
@@ -266,8 +266,12 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
         thread::sleep(Duration::from_millis(20));
     };
 
-    history.record(matched_class, total_duration as f32);
-    let _ = history.save_to_file(&history_path);
+    // User-cancelled tasks must NEVER poison history
+    let exit_code = exit_status.code();
+    if !was_cancelled && exit_code != Some(130) {
+        history.record(&project_id, matched_class, total_duration as f32);
+        let _ = history.save_to_file(&history_path);
+    }
 
     Ok(exit_status
         .code()

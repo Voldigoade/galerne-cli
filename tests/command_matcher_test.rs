@@ -69,18 +69,25 @@ fn test_excluded_commands() {
 #[test]
 fn test_duration_history_prediction() {
     let mut history = DurationHistory::default();
+    let proj = "p_test_project_1";
 
     // Unknown command defaults to not immediately launching (< 8s threshold)
-    assert!(!history.is_predicted_long(CommandClass::CargoBuild));
+    assert!(!history
+        .evaluate_decision(proj, CommandClass::CargoBuild)
+        .is_known_long());
 
     // Record a 15-second build and a 20-second build
-    history.record(CommandClass::CargoBuild, 15.0);
-    history.record(CommandClass::CargoBuild, 20.0);
+    history.record(proj, CommandClass::CargoBuild, 15.0);
+    history.record(proj, CommandClass::CargoBuild, 20.0);
 
     // Now it should predict long
-    assert!(history.is_predicted_long(CommandClass::CargoBuild));
+    assert!(history
+        .evaluate_decision(proj, CommandClass::CargoBuild)
+        .is_known_long());
 
     // Fast command (e.g. 1.2s clippy check)
-    history.record(CommandClass::CargoClippy, 1.2);
-    assert!(!history.is_predicted_long(CommandClass::CargoClippy));
+    history.record(proj, CommandClass::CargoClippy, 1.2);
+    assert!(!history
+        .evaluate_decision(proj, CommandClass::CargoClippy)
+        .is_known_long());
 }
