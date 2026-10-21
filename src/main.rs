@@ -8,7 +8,7 @@ use galerne::storage::manager::SaveManager;
 use galerne::storage::stats::format_career_stats;
 use galerne::ui::cli::{parse_cli_action, print_help, CliAction};
 use galerne::ui::dashboard::{run_dashboard, run_direct_play};
-use galerne::ui::i18n::Locale;
+use galerne::ui::i18n::{format_message, t, Locale};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -41,22 +41,62 @@ fn main() {
             }
         }
         CliAction::Saves => {
-            println!("Galerne Persistence & Archives\n");
+            let locale = Locale::detect();
+            println!("{}\n", t("saves_heading", locale));
             let save_path = save_manager.primary_save_path();
-            println!("Active Save:     {}", save_path.display());
+            println!(
+                "{}",
+                format_message(
+                    "path_label",
+                    locale,
+                    &[("path", save_path.display().to_string())],
+                )
+            );
             let backup_path = save_manager.backup_save_path();
-            println!("Backup Save:     {}", backup_path.display());
+            println!(
+                "{}",
+                format_message(
+                    "backup_path_label",
+                    locale,
+                    &[("path", backup_path.display().to_string())],
+                )
+            );
 
             match save_manager.list_archives() {
                 Ok(archives) if !archives.is_empty() => {
-                    println!("\nArchived Snapshots ({} available):", archives.len());
+                    println!(
+                        "\n{}",
+                        format_message(
+                            "archives_count",
+                            locale,
+                            &[("count", archives.len().to_string())],
+                        )
+                    );
                     for (name, size) in archives {
-                        println!("  - {:<28} ({} bytes)", name, size);
+                        println!(
+                            "  - {}",
+                            format_message(
+                                "archive_entry",
+                                locale,
+                                &[("name", format!("{name:<28}")), ("size", size.to_string()),],
+                            )
+                        );
                     }
-                    println!("\nTo restore an archive: galerne restore <archive_name>");
+                    println!("\n{}", t("cli_restore_hint", locale));
                 }
-                _ => {
-                    println!("\nNo historical archives found.");
+                Ok(_) => {
+                    println!("\n{}", t("archives_empty", locale));
+                }
+                Err(error) => {
+                    eprintln!(
+                        "{}",
+                        format_message(
+                            "cli_archives_error",
+                            locale,
+                            &[("error", error.to_string())],
+                        )
+                    );
+                    process::exit(1);
                 }
             }
         }
