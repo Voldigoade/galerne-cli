@@ -421,7 +421,7 @@ fn test_line_restoration_visual_sequence() {
             _ => None,
         };
         game.update(0.033, input);
-        if game.distance >= 1260.0 {
+        if game.relay_restored {
             break;
         }
     }

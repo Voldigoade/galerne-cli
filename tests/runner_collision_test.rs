@@ -81,6 +81,47 @@ fn obstacle_art_matches_its_traversal_span() {
 }
 
 #[test]
+fn wind_currents_grant_temporary_travel_boosts_without_permanent_speed_gain() {
+    for (distance, starts_gliding) in [(250.0, false), (900.0, true)] {
+        let mut in_wind = RunnerState::new(80, 24, 0x12345678);
+        in_wind.distance = distance;
+        in_wind.world.scroll_x = distance;
+        in_wind.world.parallax.set_world_position(distance);
+        in_wind.world.ensure_chunks_generated(distance + 100.0);
+        if starts_gliding {
+            in_wind.player.y = in_wind.world.ground_y as f32 - 5.0;
+            in_wind.player.action = ActionState::Gliding {
+                elapsed_secs: 0.0,
+                vertical_velocity: 0.0,
+            };
+        }
+
+        let mut calm = in_wind.clone();
+        for chunk in calm.world.active_chunks_mut() {
+            chunk.wind_currents.clear();
+        }
+
+        let starting_speed = in_wind.speed;
+        for _ in 0..120 {
+            in_wind.player.invulnerable_timer = 10.0;
+            calm.player.invulnerable_timer = 10.0;
+            in_wind.update(0.033, None);
+            calm.update(0.033, None);
+        }
+
+        assert!(
+            in_wind.distance > calm.distance + 2.0,
+            "the wind should create a brief traversal advantage at {distance}m"
+        );
+        assert!(
+            in_wind.speed < starting_speed + 1.0,
+            "wind should not permanently raise base speed at {distance}m"
+        );
+        assert_eq!(in_wind.active_wind_boost_timer, 0.0);
+    }
+}
+
+#[test]
 fn test_instant_pickup_collection_without_blocking() {
     let ground_y = 18.0;
     let player = RunnerPlayer::new(10.0, ground_y);

@@ -655,6 +655,17 @@ fn track_shelter_destination_and_art_read_at_both_terminal_sizes() {
 }
 
 #[test]
+fn hud_speed_reflects_a_live_wind_boost() {
+    let mut game = RunnerState::new(80, 24, 0x12345678);
+    game.active_wind_boost_timer = 1.0;
+
+    let mut frame = Buffer::new(80, 24);
+    game.render(&mut frame, Locale::En);
+
+    assert!(buffer_to_string(&frame).contains("SPD 21"));
+}
+
+#[test]
 fn first_region_renders_a_raised_walkway_above_the_lower_track() {
     let mut game = RunnerState::new(236, 53, 0x12345678);
     game.distance = 160.0;

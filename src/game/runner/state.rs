@@ -76,6 +76,8 @@ pub struct RunnerState {
     pub active_magnet_timer: f32,
     pub active_surge_timer: f32,
     #[serde(default)]
+    pub active_wind_boost_timer: f32,
+    #[serde(default)]
     pub relay_restored: bool,
     #[serde(default)]
     pub canal_gate_opened: bool,
@@ -122,6 +124,7 @@ impl RunnerState {
             transition_success: true,
             active_magnet_timer: 0.0,
             active_surge_timer: 0.0,
+            active_wind_boost_timer: 0.0,
             relay_restored: false,
             canal_gate_opened: false,
             relay_activation_timer: None,
@@ -316,6 +319,17 @@ impl RunnerState {
         nearest.map(|(distance, name)| (name, distance.ceil() as u32))
     }
 
+    fn effective_speed(&self) -> f32 {
+        let speed_multiplier = if self.active_surge_timer > 0.0 {
+            1.5
+        } else if self.active_wind_boost_timer > 0.0 {
+            1.2
+        } else {
+            1.0
+        };
+        (self.speed + self.tailwind_tier.speed_bonus()) * speed_multiplier
+    }
+
     pub fn update(&mut self, dt: f32, input: Option<PlayerInput>) {
         if let Some(ref mut t_rem) = self.transition_remaining_secs {
             *t_rem -= dt;
@@ -357,17 +371,12 @@ impl RunnerState {
         if self.active_surge_timer > 0.0 {
             self.active_surge_timer = (self.active_surge_timer - dt).max(0.0);
         }
+        if self.active_wind_boost_timer > 0.0 {
+            self.active_wind_boost_timer = (self.active_wind_boost_timer - dt).max(0.0);
+        }
 
-        let speed_mult = if self.active_surge_timer > 0.0 {
-            1.5
-        } else {
-            1.0
-        };
-        let tailwind_bonus = self.tailwind_tier.speed_bonus();
         self.speed = (self.speed + SPEED_ACCELERATION_RATE * dt).min(MAX_FORWARD_SPEED);
-        let effective_speed = (self.speed + tailwind_bonus) * speed_mult;
-
-        let dx = effective_speed * dt;
+        let dx = self.effective_speed() * dt;
         self.distance += dx;
         let previous_scroll_x = self.world.scroll_x;
         self.world
@@ -433,7 +442,7 @@ impl RunnerState {
                             }
                         }
                         WindKind::TailwindGust => {
-                            self.speed = (self.speed + 8.0 * dt).min(32.0);
+                            self.active_wind_boost_timer = self.active_wind_boost_timer.max(0.4);
                         }
                         WindKind::CrosswindChasm => {
                             if matches!(
@@ -444,7 +453,8 @@ impl RunnerState {
                                     elapsed_secs: 0.0,
                                     vertical_velocity: -6.0 * wind.strength,
                                 };
-                                self.speed = (self.speed + 12.0 * dt).min(34.0);
+                                self.active_wind_boost_timer =
+                                    self.active_wind_boost_timer.max(0.4);
                             }
                         }
                     }
@@ -1016,7 +1026,7 @@ impl RunnerState {
             hud_dist_label,
             self.distance as u32,
             hud_spd_label,
-            self.speed as u32,
+            self.effective_speed() as u32,
             hud_flow_label,
             self.flow_multiplier,
             hud_shards_label,
