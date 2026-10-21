@@ -1,8 +1,10 @@
 use galerne::game::runner::action::{ActionState, InputBuffer, PlayerInput, PlayerInputWrapper};
 use galerne::game::runner::items::{ItemKind, PickupItem};
+use galerne::game::runner::obstacles::{Obstacle, ObstacleKind};
+use galerne::game::runner::player::PLAYER_WIDTH;
 use galerne::game::runner::region::{sector_for_distance, SectorKind};
 use galerne::game::runner::state::RunnerState;
-use galerne::game::runner::world::{Chunk, Landmark, LandmarkKind};
+use galerne::game::runner::world::{Chunk, ChunkWorld, Landmark, LandmarkKind, Walkway};
 use galerne::terminal::buffer::Buffer;
 use galerne::ui::i18n::Locale;
 
@@ -17,13 +19,19 @@ fn test_region_progression_unlocks_landmarks() {
 
     assert_eq!(game.last_checkpoint_id, 0);
 
+    let mut entered_the_upper_route = false;
     for _ in 0..3000 {
         game.player.invulnerable_timer = 10.0;
-        let input = match game.current_prompt() {
-            Some("prompt_greet_companion" | "prompt_search_cache" | "prompt_connect_line") => {
-                Some(PlayerInput::Interact)
+        let input = if !entered_the_upper_route && game.distance >= 376.0 {
+            entered_the_upper_route = true;
+            Some(PlayerInput::Jump)
+        } else {
+            match game.current_prompt() {
+                Some("prompt_greet_companion" | "prompt_search_cache" | "prompt_connect_line") => {
+                    Some(PlayerInput::Interact)
+                }
+                _ => None,
             }
-            _ => None,
         };
         game.update(0.033, input);
         if game.distance >= 1260.0 {
@@ -345,6 +353,93 @@ fn a_cache_is_not_opened_or_looted_by_running_past() {
         &game.world.chunks[0].landmarks[0].kind,
         LandmarkKind::SecretCache { opened: false }
     ));
+}
+
+#[test]
+fn elevated_cache_is_not_prompted_or_opened_from_the_lower_route() {
+    let ground_y = 19.0;
+    let mut game = RunnerState::new(80, 24, 0x4321);
+    let cache_x = game.player.x + 1.0;
+    game.world.chunks.clear();
+    game.world.chunks.push(Chunk {
+        index: 0,
+        obstacles: vec![Obstacle::new(28.0, ground_y, ObstacleKind::OverheadPipe)],
+        items: vec![
+            PickupItem::new(cache_x, ground_y - 6.0, ItemKind::AncientCompass),
+            PickupItem::new(cache_x + 2.0, ground_y - 6.0, ItemKind::InductionFilament),
+        ],
+        wind_currents: Vec::new(),
+        landmarks: vec![Landmark::new(
+            cache_x,
+            ground_y - 5.0,
+            LandmarkKind::SecretCache { opened: false },
+        )],
+        walkways: vec![Walkway::new(0.0, 50.0, 5.0)],
+    });
+
+    assert_eq!(game.current_prompt(), None);
+    game.update(0.01, Some(PlayerInput::Interact));
+
+    assert!(!game.secret_cache_found);
+    assert!(game.collected_relics.is_empty());
+}
+
+#[test]
+fn span_cache_has_a_reachable_upper_route_above_the_canal_pipe() {
+    let mut world = ChunkWorld::new(0x12345678, 80, 24);
+    world.ensure_chunks_generated(450.0);
+    let span = world.chunks.iter().find(|chunk| chunk.index == 8).unwrap();
+
+    assert!(span.walkways.iter().any(|walkway| {
+        walkway.start_rel_x <= 10.0 && walkway.end_rel_x >= 50.0 && walkway.rise == 5.0
+    }));
+    assert!(span.obstacles.iter().any(|obstacle| {
+        obstacle.kind == ObstacleKind::OverheadPipe && obstacle.y == world.ground_y as f32
+    }));
+    assert!(span.landmarks.iter().any(|landmark| {
+        matches!(landmark.kind, LandmarkKind::SecretCache { .. })
+            && landmark.y == world.ground_y as f32 - 5.0
+    }));
+}
+
+#[test]
+fn jumping_onto_the_span_reaches_the_cache_without_hitting_the_canal_pipe() {
+    let mut game = RunnerState::new(80, 24, 0x12345678);
+    game.world.ensure_chunks_generated(450.0);
+    let ground_y = game.world.ground_y as f32;
+    let upper_y = ground_y - 5.0;
+    game.world.scroll_x = 410.0 - game.player.x - PLAYER_WIDTH as f32 / 2.0;
+    game.distance = game.world.scroll_x + game.player.x;
+    game.world.parallax.update(game.world.scroll_x);
+
+    game.update(0.033, Some(PlayerInput::Jump));
+    for _ in 0..40 {
+        if game.player.is_on_ground(upper_y) {
+            break;
+        }
+        game.update(0.033, None);
+    }
+    assert!(game.player.is_on_ground(upper_y));
+
+    for _ in 0..30 {
+        if game.current_prompt() == Some("prompt_search_cache") {
+            break;
+        }
+        game.update(0.033, None);
+    }
+    assert_eq!(game.current_prompt(), Some("prompt_search_cache"));
+
+    game.update(0.033, Some(PlayerInput::Interact));
+    assert!(game.secret_cache_found);
+
+    for _ in 0..30 {
+        if game.collected_relics.len() == 2 {
+            break;
+        }
+        game.update(0.033, None);
+    }
+    assert!(game.collected_relics.contains(&ItemKind::AncientCompass));
+    assert!(game.collected_relics.contains(&ItemKind::InductionFilament));
 }
 
 #[test]

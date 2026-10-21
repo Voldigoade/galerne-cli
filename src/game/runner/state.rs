@@ -20,6 +20,7 @@ pub const SPEED_ACCELERATION_RATE: f32 = 0.15;
 const INTERACTION_RADIUS: f32 = 6.0;
 const INTERACTION_PROMPT_RADIUS: f32 = 12.0;
 const INTERACTION_ACCEPT_RADIUS: f32 = 14.0;
+const INTERACTION_VERTICAL_RADIUS: f32 = 2.5;
 const FLOW_WINDOW_SECS: f32 = 4.0;
 const FLOW_STEP: f32 = 0.05;
 const FLOW_MAX_STEPS: u8 = 4;
@@ -232,7 +233,9 @@ impl RunnerState {
             for landmark in &chunk.landmarks {
                 let abs_x = chunk_start_x + landmark.rel_x;
                 let distance = (abs_player_x - abs_x).abs();
-                if distance > INTERACTION_PROMPT_RADIUS {
+                if distance > INTERACTION_PROMPT_RADIUS
+                    || (self.player.y - landmark.y).abs() > INTERACTION_VERTICAL_RADIUS
+                {
                     continue;
                 }
 
@@ -433,10 +436,12 @@ impl RunnerState {
                 let screen_x = abs_x - scroll_x;
 
                 let distance = (self.player.x - screen_x).abs();
-                let within_range = match &lm.kind {
-                    LandmarkKind::CheckpointPylon { .. } => distance < INTERACTION_RADIUS,
-                    _ => interaction_pressed && distance < INTERACTION_ACCEPT_RADIUS,
-                };
+                let same_level = (self.player.y - lm.y).abs() <= INTERACTION_VERTICAL_RADIUS;
+                let within_range = same_level
+                    && match &lm.kind {
+                        LandmarkKind::CheckpointPylon { .. } => distance < INTERACTION_RADIUS,
+                        _ => interaction_pressed && distance < INTERACTION_ACCEPT_RADIUS,
+                    };
 
                 if within_range {
                     match &mut lm.kind {
@@ -852,7 +857,7 @@ impl RunnerState {
                 let base_y = match obs.kind {
                     super::obstacles::ObstacleKind::LowBarrier
                     | super::obstacles::ObstacleKind::Pylon => obs.y.round() as usize,
-                    super::obstacles::ObstacleKind::OverheadPipe => (obs.y - 2.0).round() as usize,
+                    super::obstacles::ObstacleKind::OverheadPipe => (obs.y - 1.0).round() as usize,
                 };
 
                 let sprite_lines = obs.sprite();

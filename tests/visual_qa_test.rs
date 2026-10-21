@@ -271,6 +271,35 @@ fn bridge_underside_uses_spaced_authored_supports() {
 }
 
 #[test]
+fn span_cache_is_composed_on_the_raised_route_above_the_canal_pipe() {
+    for (width, height) in [(80, 24), (236, 53)] {
+        let mut game = RunnerState::new(width as usize, height as usize, 0x12345678);
+        game.world.ensure_chunks_generated(450.0);
+        game.world.scroll_x = 410.0 - game.player.x - 3.5;
+        game.distance = game.world.scroll_x + game.player.x;
+        game.world.parallax.update(game.world.scroll_x);
+
+        let mut frame = Buffer::new(width, height);
+        game.render(&mut frame, Locale::En);
+        let rendered = buffer_to_string(&frame);
+        println!("--- VISUAL QA: ELEVATED CACHE ROUTE ({width}x{height}) ---\n{rendered}");
+
+        let deck_y = (game.world.ground_y - 5) as u16;
+        let pipe_x = (428.0 - game.world.scroll_x).floor() as u16;
+        let cache_x = (442.0 - game.world.scroll_x).floor() as u16;
+        let deck_row: String = (0..width)
+            .map(|x| frame.get(x, deck_y).unwrap().ch)
+            .collect();
+        assert!(deck_row.contains('+'));
+        assert!(deck_row.matches('=').count() > 12);
+        assert_eq!(frame.get(pipe_x, deck_y).unwrap().ch, '=');
+        assert_eq!(frame.get(cache_x, deck_y).unwrap().ch, '=');
+        assert!(rendered.contains("|=[o]==|"));
+        assert!(rendered.contains("=[*###*]="));
+    }
+}
+
+#[test]
 fn compact_glide_renders_a_deployed_kite_over_the_traveler() {
     let mut game = RunnerState::new(80, 24, 0x12345678);
     game.world.chunks.clear();
@@ -351,7 +380,7 @@ fn first_region_obstacles_render_at_both_terminal_sizes() {
                 buffer_to_string(&frame)
             );
             let base_y = match kind {
-                ObstacleKind::OverheadPipe => (ground_y - 2.0) as usize,
+                ObstacleKind::OverheadPipe => (ground_y - 1.0) as usize,
                 ObstacleKind::LowBarrier | ObstacleKind::Pylon => ground_y as usize,
             };
             let color = match kind {

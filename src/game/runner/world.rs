@@ -259,20 +259,21 @@ impl ChunkWorld {
                 items.push(PickupItem::new(35.0, ground_y, ItemKind::GaleShard));
             }
             8 => {
+                walkways.push(Walkway::new(10.0, CHUNK_WIDTH as f32, 5.0));
                 landmarks.push(Landmark::new(
                     42.0,
-                    ground_y,
+                    ground_y - 5.0,
                     LandmarkKind::SecretCache { opened: false },
                 ));
                 obstacles.push(Obstacle::new(28.0, ground_y, ObstacleKind::OverheadPipe));
                 items.push(PickupItem::new(
                     42.0,
-                    ground_y - 1.0,
+                    ground_y - 6.0,
                     ItemKind::AncientCompass,
                 ));
                 items.push(PickupItem::new(
                     45.0,
-                    ground_y - 1.0,
+                    ground_y - 6.0,
                     ItemKind::InductionFilament,
                 ));
             }
