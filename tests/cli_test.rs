@@ -1,4 +1,5 @@
 use galerne::ui::cli::{parse_cli_action, CliAction};
+use std::process::Command;
 
 #[test]
 fn test_cli_argument_parsing() {
@@ -104,5 +105,26 @@ fn test_cli_wrap_argument_parsing() {
             assert_eq!(cmd, vec!["cargo", "build", "--release"]);
         }
         other => panic!("Expected CliAction::Wrap, got {:?}", other),
+    }
+}
+
+#[test]
+fn command_line_help_uses_the_selected_locale() {
+    for (locale, expected) in [
+        ("fr", "Commencer un voyage manuel"),
+        ("es", "Iniciar un viaje manual"),
+        ("zh-CN", "开始手动旅程"),
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_galerne"))
+            .arg("help")
+            .env("GALERNE_LANG", locale)
+            .output()
+            .expect("Galerne help should run");
+        assert!(output.status.success());
+        let stdout = String::from_utf8(output.stdout).expect("help output should be UTF-8");
+        assert!(
+            stdout.contains(expected),
+            "help should use locale {locale}: {stdout}"
+        );
     }
 }

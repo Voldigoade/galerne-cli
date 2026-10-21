@@ -155,7 +155,7 @@ fn main() {
             }
         },
         CliAction::Help => {
-            print_help();
+            print_help(Locale::detect());
         }
         CliAction::Version => {
             println!("galerne {}", galerne::VERSION);

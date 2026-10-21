@@ -1,5 +1,7 @@
 //! Command-line argument parsing and command action classification.
 
+use crate::ui::i18n::{t, Locale};
+
 /// Intended application action dispatched from CLI arguments.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CliAction {
@@ -75,25 +77,39 @@ pub fn parse_cli_action(args: &[String]) -> CliAction {
     }
 }
 
-pub fn print_help() {
-    println!(
-        "Galerne {} — Native terminal game for developer wait times\n\n\
-        USAGE:\n  \
-          galerne                     Open the journey dashboard\n  \
-          galerne play                Begin a manual journey\n  \
-          galerne stats               Display career progression and wait time saved\n  \
-          galerne doctor              Check terminal, saves, and shell integration\n  \
-          galerne saves               Inspect active saves and archived backups\n  \
-          galerne reset [-y|--yes]    Archive current progress and initialize fresh state\n  \
-          galerne restore <archive>   Restore a previous archived save snapshot\n  \
-          galerne setup               Configure shell integration (Bash, Zsh, PowerShell)\n  \
-          galerne enable              Enable automatic wait-time game activation\n  \
-          galerne disable             Disable automatic game activation\n  \
-          galerne uninstall           Safely remove shell hooks and application state\n  \
-          galerne update              Check for and safely install the latest release\n  \
-          galerne update --check      Check release availability without modifying installation\n  \
-          galerne wrap <command...>   Explicitly execute and supervise a development command\n  \
-          galerne help                Display this help overview\n",
-        crate::VERSION
+pub fn print_help(locale: Locale) {
+    print!("{}", help_text(locale));
+}
+
+fn help_text(locale: Locale) -> String {
+    let commands = [
+        ("galerne", "cli_dashboard"),
+        ("galerne play", "cli_play"),
+        ("galerne stats", "cli_stats"),
+        ("galerne doctor", "cli_doctor"),
+        ("galerne saves", "cli_saves"),
+        ("galerne reset [-y|--yes]", "cli_reset"),
+        ("galerne restore <archive>", "cli_restore"),
+        ("galerne setup", "cli_setup"),
+        ("galerne enable", "cli_enable"),
+        ("galerne disable", "cli_disable"),
+        ("galerne uninstall", "cli_uninstall"),
+        ("galerne update", "cli_update"),
+        ("galerne update --check", "cli_update_check"),
+        ("galerne wrap <command...>", "cli_wrap"),
+        ("galerne help", "cli_help"),
+        ("galerne --version", "cli_version"),
+    ];
+    let mut output = format!(
+        "Galerne {} — {}\n\n{}",
+        crate::VERSION,
+        t("cli_tagline", locale),
+        t("cli_usage", locale)
     );
+
+    for (command, description) in commands {
+        output.push_str(&format!("\n  {command:<30} {}", t(description, locale)));
+    }
+    output.push('\n');
+    output
 }
