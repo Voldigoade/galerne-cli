@@ -3,8 +3,9 @@
 use std::thread;
 use std::time::Duration;
 
-use crate::terminal::buffer::{Color, Style};
+use crate::terminal::buffer::{Buffer, Color, Style};
 use crate::terminal::engine::Engine;
+use crate::ui::i18n::{format_message, t, Locale};
 
 /// Renders a short, polished ~250ms transition effect when the developer task terminates.
 /// Skips immediately if the player presses any key.
@@ -13,19 +14,10 @@ pub fn run_completion_transition(
     success: bool,
     dist_gained: u32,
     shards_gained: u32,
+    locale: Locale,
 ) {
     let w = engine.width();
     let h = engine.height();
-    let _mid_y = h / 2;
-
-    let (title, title_color) = if success {
-        ("◆ TASK COMPLETE ◆", Color::Green)
-    } else {
-        ("✕ TASK FAILED ✕", Color::Red)
-    };
-
-    let summary = format!("+{:<3}m DIST  |  +{:<2} SHARDS", dist_gained, shards_gained);
-    let note = "progress saved";
 
     // Frame 1: Glitch / dissolve random cells
     {
@@ -48,55 +40,137 @@ pub fn run_completion_transition(
 
     // Frame 2: Centered status banner
     {
-        let buf = engine.buffer_mut();
-        let box_w = 40u16.min(w.saturating_sub(4));
-        let box_h = 7u16.min(h.saturating_sub(2));
-        let start_x = (w.saturating_sub(box_w)) / 2;
-        let start_y = (h.saturating_sub(box_h)) / 2;
-
-        let frame_color = if success { Color::Cyan } else { Color::Red };
-        let bg = Color::Reset;
-
-        // Box border
-        buf.set_char(start_x, start_y, '╔', frame_color, bg);
-        for x in (start_x + 1)..(start_x + box_w - 1) {
-            buf.set_char(x, start_y, '═', frame_color, bg);
-        }
-        buf.set_char(start_x + box_w - 1, start_y, '╗', frame_color, bg);
-
-        for y in (start_y + 1)..(start_y + box_h - 1) {
-            buf.set_char(start_x, y, '║', frame_color, bg);
-            for x in (start_x + 1)..(start_x + box_w - 1) {
-                buf.set_char(x, y, ' ', Color::Reset, bg);
-            }
-            buf.set_char(start_x + box_w - 1, y, '║', frame_color, bg);
-        }
-
-        buf.set_char(start_x, start_y + box_h - 1, '╚', frame_color, bg);
-        for x in (start_x + 1)..(start_x + box_w - 1) {
-            buf.set_char(x, start_y + box_h - 1, '═', frame_color, bg);
-        }
-        buf.set_char(
-            start_x + box_w - 1,
-            start_y + box_h - 1,
-            '╝',
-            frame_color,
-            bg,
+        render_completion_banner(
+            engine.buffer_mut(),
+            success,
+            dist_gained,
+            shards_gained,
+            locale,
         );
-
-        // Content
-        let tx = start_x + (box_w.saturating_sub(title.len() as u16)) / 2;
-        let sx = start_x + (box_w.saturating_sub(summary.len() as u16)) / 2;
-        let nx = start_x + (box_w.saturating_sub(note.len() as u16)) / 2;
-
-        buf.draw_str_styled(tx, start_y + 1, title, Style::new(title_color, bg).bold());
-        buf.draw_str_styled(sx, start_y + 3, &summary, Style::new(Color::White, bg));
-        buf.draw_str_styled(nx, start_y + 4, note, Style::new(Color::DarkGrey, bg));
-
         let _ = engine.flush();
     }
 
     let _ = check_skip_keypress(Duration::from_millis(170));
+}
+
+fn render_completion_banner(
+    buffer: &mut Buffer,
+    success: bool,
+    dist_gained: u32,
+    shards_gained: u32,
+    locale: Locale,
+) {
+    let width = buffer.width();
+    let height = buffer.height();
+    let box_w = 40u16.min(width.saturating_sub(4));
+    let box_h = 7u16.min(height.saturating_sub(2));
+    if box_w < 4 || box_h < 7 {
+        return;
+    }
+
+    let start_x = (width - box_w) / 2;
+    let start_y = (height - box_h) / 2;
+    let frame_color = if success { Color::Cyan } else { Color::Red };
+    let title_color = if success { Color::Green } else { Color::Red };
+    let bg = Color::Reset;
+
+    buffer.set_char(start_x, start_y, '╔', frame_color, bg);
+    for x in (start_x + 1)..(start_x + box_w - 1) {
+        buffer.set_char(x, start_y, '═', frame_color, bg);
+    }
+    buffer.set_char(start_x + box_w - 1, start_y, '╗', frame_color, bg);
+
+    for y in (start_y + 1)..(start_y + box_h - 1) {
+        buffer.set_char(start_x, y, '║', frame_color, bg);
+        for x in (start_x + 1)..(start_x + box_w - 1) {
+            buffer.set_char(x, y, ' ', Color::Reset, bg);
+        }
+        buffer.set_char(start_x + box_w - 1, y, '║', frame_color, bg);
+    }
+
+    buffer.set_char(start_x, start_y + box_h - 1, '╚', frame_color, bg);
+    for x in (start_x + 1)..(start_x + box_w - 1) {
+        buffer.set_char(x, start_y + box_h - 1, '═', frame_color, bg);
+    }
+    buffer.set_char(
+        start_x + box_w - 1,
+        start_y + box_h - 1,
+        '╝',
+        frame_color,
+        bg,
+    );
+
+    let title = t(
+        if success {
+            "completion_success"
+        } else {
+            "completion_failure"
+        },
+        locale,
+    );
+    let distance = format_message(
+        "completion_distance",
+        locale,
+        &[("distance", dist_gained.to_string())],
+    );
+    let shards = format_message(
+        "completion_shards",
+        locale,
+        &[("shards", shards_gained.to_string())],
+    );
+    let saved = t("completion_saved", locale);
+
+    draw_centered_in_box(
+        buffer,
+        start_x,
+        box_w,
+        start_y + 1,
+        title,
+        title_color,
+        true,
+    );
+    draw_centered_in_box(
+        buffer,
+        start_x,
+        box_w,
+        start_y + 2,
+        &distance,
+        Color::White,
+        false,
+    );
+    draw_centered_in_box(
+        buffer,
+        start_x,
+        box_w,
+        start_y + 3,
+        &shards,
+        Color::White,
+        false,
+    );
+    draw_centered_in_box(
+        buffer,
+        start_x,
+        box_w,
+        start_y + 4,
+        saved,
+        Color::DarkGrey,
+        false,
+    );
+}
+
+fn draw_centered_in_box(
+    buffer: &mut Buffer,
+    start_x: u16,
+    box_width: u16,
+    y: u16,
+    text: &str,
+    color: Color,
+    bold: bool,
+) {
+    let text_width = text.chars().count().min(u16::MAX as usize) as u16;
+    let x = start_x + (box_width.saturating_sub(text_width)) / 2;
+    let style = Style::new(color, Color::Reset);
+    buffer.draw_str_styled(x, y, text, if bold { style.bold() } else { style });
 }
 
 fn check_skip_keypress(duration: Duration) -> bool {
@@ -109,4 +183,74 @@ fn check_skip_keypress(duration: Duration) -> bool {
         thread::sleep(Duration::from_millis(5));
     }
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::render_completion_banner;
+    use crate::terminal::buffer::Buffer;
+    use crate::ui::i18n::Locale;
+
+    #[test]
+    fn completion_banner_uses_selected_locale_at_the_render_callsite() {
+        for (locale, expected) in [
+            (
+                Locale::En,
+                [
+                    "TASK COMPLETE",
+                    "Journey +45m",
+                    "+3 shards",
+                    "Progress saved",
+                ],
+            ),
+            (
+                Locale::Fr,
+                [
+                    "TÂCHE TERMINÉE",
+                    "Parcours : +45 m",
+                    "+3 éclats",
+                    "Progression sauvegardée",
+                ],
+            ),
+            (
+                Locale::Es,
+                [
+                    "TAREA COMPLETADA",
+                    "Recorrido: +45 m",
+                    "+3 fragmentos",
+                    "Progreso guardado",
+                ],
+            ),
+            (
+                Locale::ZhCn,
+                ["任务完成", "行程：+45米", "+3 碎片", "进度已保存"],
+            ),
+        ] {
+            let mut buffer = Buffer::new(60, 20);
+            render_completion_banner(&mut buffer, true, 45, 3, locale);
+            let rendered = (0..buffer.height())
+                .map(|y| {
+                    (0..buffer.width())
+                        .map(|x| buffer.get(x, y).unwrap().ch)
+                        .collect::<String>()
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+
+            for text in expected {
+                assert!(rendered.contains(text), "Missing {text:?} for {locale:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn failed_task_banner_uses_the_failure_translation() {
+        let mut buffer = Buffer::new(60, 20);
+        render_completion_banner(&mut buffer, false, 12, 0, Locale::Es);
+        let title_row = (0..buffer.width())
+            .map(|x| buffer.get(x, 7).unwrap().ch)
+            .collect::<String>();
+
+        assert!(title_row.contains("TAREA FALLIDA"));
+    }
 }

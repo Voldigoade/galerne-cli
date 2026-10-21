@@ -19,13 +19,13 @@ ADR files live in `docs/decisions/` named sequentially: `0001-<short-title>.md`.
 Local state persistence must adhere to strict stability and recovery standards:
 
 - **Schema Versioning**:
-  Every save payload includes a top-level `version: u32` in its fixed header.
+  The fixed header carries the schema version, and the serialized payload includes the matching top-level `version: u32`.
 - **Forward & Backward Compatibility**:
   - **Upgrades**: Upgrades are automatic and deterministic via sequential migration functions (`v1_to_v2`, `v2_to_v3`).
-  - **Downgrades / Newer Saves**: If a save file indicates a higher version than the current binary supports (`version > CURRENT_VERSION`), the game must gracefully refuse to load it and notify the user. Under no circumstances should an unsupported newer save be overwritten or corrupted.
+  - **Newer Saves**: If a save file indicates a higher version than the current binary supports (`version > CURRENT_SCHEMA_VERSION`), loading returns an explicit unsupported-schema error. Save, reset, and restore operations must preserve that file unchanged.
 - **Integrity Verification**:
-  Saves must include a checksum (CRC32, xxHash, or BLAKE3) over the serialized payload. Deserialization must only run after verifying magic bytes and matching the checksum.
+  Saves use CRC32 over the serialized payload. Deserialization must only run after verifying the magic bytes and checksum.
 - **Atomic Persistence**:
   Always write saves to a sibling temporary file in the same filesystem directory, flush and sync, then atomically rename over the target save path.
 - **Safe Recovery**:
-  Maintain a previous known-good backup (`.save.bak`). If the primary save is unreadable or fails checksum validation, quarantine the corrupt file (`.save.corrupt.<timestamp>`), restore from `.save.bak`, and notify the player without panicking.
+  The active save is `save.dat`, with a previous-save backup at `save.dat.bak`. A corrupt primary is moved to `save.dat.corrupt.<timestamp>` before recovery from the backup. Missing, corrupt, I/O-failed, and unsupported-schema saves remain distinct outcomes; only a missing save may initialize defaults.

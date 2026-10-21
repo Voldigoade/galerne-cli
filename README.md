@@ -54,6 +54,7 @@ Automatic activation depends on the configured shell integration and the task cl
 - Jump: `Space`, `Up`, or `W`
 - Slide: `Down` or `S`
 - Dash: `Right`, `X`, or `D`
+- Interact with a nearby cache, traveler, or switchhouse: `E`
 - Leave the game view: `Esc` or `q`
 
 When Galerne is supervising a command, leaving the game view lets the command continue and restores its output. Ctrl+C in the game view also leaves the game; Ctrl+C after returning to command output interrupts the command.

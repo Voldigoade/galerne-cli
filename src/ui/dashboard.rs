@@ -210,7 +210,7 @@ pub fn run_dashboard() -> io::Result<()> {
         let locale = save_state.settings.locale.unwrap_or_else(Locale::detect);
 
         if engine.is_too_small() {
-            engine.render_too_small_notice();
+            engine.render_too_small_notice(locale);
             engine.flush()?;
             thread::sleep(Duration::from_millis(100));
             continue;
@@ -1186,7 +1186,7 @@ pub fn run_manual_game(
         }
 
         if engine.is_too_small() {
-            engine.render_too_small_notice();
+            engine.render_too_small_notice(locale);
         } else {
             engine.buffer_mut().clear();
             game.render(engine.buffer_mut(), locale);

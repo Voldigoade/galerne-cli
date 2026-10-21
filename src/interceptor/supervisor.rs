@@ -203,7 +203,7 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
         }
 
         if engine.is_too_small() {
-            engine.render_too_small_notice();
+            engine.render_too_small_notice(locale);
         } else {
             engine.buffer_mut().clear();
             game.render(engine.buffer_mut(), locale);
@@ -294,6 +294,7 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
             status.success(),
             dist_gained as u32,
             shards_gained,
+            locale,
         );
 
         // Restore terminal to cooked mode

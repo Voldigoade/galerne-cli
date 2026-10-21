@@ -10,6 +10,7 @@ use crossterm::terminal;
 use crossterm::QueueableCommand;
 
 use super::buffer::Buffer;
+use crate::ui::i18n::{format_message, t, Locale};
 
 pub const MIN_TERMINAL_WIDTH: u16 = 60;
 pub const MIN_TERMINAL_HEIGHT: u16 = 20;
@@ -81,36 +82,8 @@ impl Engine {
     }
 
     /// Renders a centered message if the terminal is below minimum viable dimensions.
-    pub fn render_too_small_notice(&mut self) {
-        self.current.clear();
-        let w = self.current.width();
-        let h = self.current.height();
-
-        let msg1 = "TERMINAL TOO SMALL";
-        let msg2 = format!(
-            "Current: {}x{} — Required: {}x{}",
-            w, h, MIN_TERMINAL_WIDTH, MIN_TERMINAL_HEIGHT
-        );
-        let msg3 = "Please expand your terminal window.";
-
-        let mid_y = h / 2;
-        if mid_y > 1 {
-            let x1 = w.saturating_sub(msg1.len() as u16) / 2;
-            let x2 = w.saturating_sub(msg2.len() as u16) / 2;
-            let x3 = w.saturating_sub(msg3.len() as u16) / 2;
-
-            self.current
-                .draw_str(x1, mid_y.saturating_sub(1), msg1, Color::Red, Color::Reset);
-            self.current
-                .draw_str(x2, mid_y, &msg2, Color::Yellow, Color::Reset);
-            self.current.draw_str(
-                x3,
-                mid_y.saturating_add(1),
-                msg3,
-                Color::DarkGrey,
-                Color::Reset,
-            );
-        }
+    pub fn render_too_small_notice(&mut self, locale: Locale) {
+        draw_too_small_notice(&mut self.current, locale);
     }
 
     /// Compares `current` against `previous`, emits required ANSI sequences,
@@ -163,6 +136,99 @@ impl Engine {
             Ok(Some(event::read()?))
         } else {
             Ok(None)
+        }
+    }
+}
+
+fn draw_too_small_notice(buffer: &mut Buffer, locale: Locale) {
+    buffer.clear();
+    let width = buffer.width();
+    let height = buffer.height();
+    let heading = t("terminal_too_small", locale);
+    let dimensions = format_message(
+        "terminal_size_required",
+        locale,
+        &[
+            ("width", width.to_string()),
+            ("height", height.to_string()),
+            ("min_width", MIN_TERMINAL_WIDTH.to_string()),
+            ("min_height", MIN_TERMINAL_HEIGHT.to_string()),
+        ],
+    );
+    let instruction = t("terminal_expand_window", locale);
+
+    let mid_y = height / 2;
+    if mid_y <= 1 {
+        return;
+    }
+
+    draw_centered(buffer, mid_y - 1, heading, Color::Red);
+    draw_centered(buffer, mid_y, &dimensions, Color::Yellow);
+    draw_centered(buffer, mid_y + 1, instruction, Color::DarkGrey);
+}
+
+fn draw_centered(buffer: &mut Buffer, y: u16, text: &str, color: Color) {
+    let text_width = text.chars().count().min(u16::MAX as usize) as u16;
+    let x = buffer.width().saturating_sub(text_width) / 2;
+    buffer.draw_str(x, y, text, color, Color::Reset);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::draw_too_small_notice;
+    use crate::terminal::buffer::Buffer;
+    use crate::ui::i18n::Locale;
+
+    #[test]
+    fn terminal_size_notice_uses_selected_locale() {
+        for (locale, expected) in [
+            (
+                Locale::En,
+                [
+                    "TERMINAL TOO SMALL",
+                    "Current: 80x24 — minimum: 60x20",
+                    "Please expand your terminal window.",
+                ],
+            ),
+            (
+                Locale::Fr,
+                [
+                    "TERMINAL TROP PETIT",
+                    "Actuel : 80x24 — minimum : 60x20",
+                    "Agrandissez la fenêtre du terminal.",
+                ],
+            ),
+            (
+                Locale::Es,
+                [
+                    "TERMINAL DEMASIADO PEQUEÑA",
+                    "Actual: 80x24 — mínimo: 60x20",
+                    "Aumenta el tamaño de la ventana del terminal.",
+                ],
+            ),
+            (
+                Locale::ZhCn,
+                [
+                    "终端窗口太小",
+                    "当前：80x24 — 最低：60x20",
+                    "请扩大终端窗口。",
+                ],
+            ),
+        ] {
+            let mut buffer = Buffer::new(80, 24);
+            draw_too_small_notice(&mut buffer, locale);
+            let rendered = (0..buffer.height())
+                .map(|y| {
+                    (0..buffer.width())
+                        .map(|x| buffer.get(x, y).unwrap().ch)
+                        .collect::<String>()
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+
+            for text in expected {
+                assert!(rendered.contains(text), "Missing {text:?} for {locale:?}");
+            }
         }
     }
 }

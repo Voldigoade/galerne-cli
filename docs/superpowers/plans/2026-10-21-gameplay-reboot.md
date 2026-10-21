@@ -1,10 +1,10 @@
 > **Historical foundation plan:** This document describes an early runner prototype and is not an accepted final game design. The current branch continues toward a persistent adventure.
 
-# Galerne Gameplay Reboot: Terminal-Native Endless Runner Implementation Plan
+# Galerne Gameplay Reboot: Early Traversal Foundation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace the rejected survivor-arena game with a polished, terminal-native 2D endless forward runner featuring automatic motion, discrete action controls with input buffering/coyote time, multi-cell authored ASCII art, multi-layer parallax scrolling, non-blocking pickups, and an embedded lightweight i18n foundation (EN, FR, ES, zh-CN).
+**Goal:** Replace the rejected survivor-arena prototype with an early terminal-native traversal foundation featuring automatic forward motion, discrete action controls with input buffering and coyote time, authored multi-cell ASCII art, parallax scrolling, non-blocking pickups, and an embedded i18n foundation (EN, FR, ES, zh-CN). This plan records prototype work, not accepted final game design.
 
 **Architecture:** A fixed-timestep simulation runner (~30 FPS) with decoupled ASCII diff-rendering. Chunks are generated deterministically ahead and pruned behind. Player actions (Jump, Slide, Dash) use state-machine animations with coyote time and input queuing. Textual UI is localized across 4 languages with auto-detection.
 
