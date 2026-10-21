@@ -11,7 +11,7 @@ use crate::terminal::engine::Engine;
 pub fn run_completion_transition(
     engine: &mut Engine,
     success: bool,
-    xp_gained: u32,
+    dist_gained: u32,
     shards_gained: u32,
 ) {
     let w = engine.width();
@@ -24,7 +24,7 @@ pub fn run_completion_transition(
         ("✕ TASK FAILED ✕", Color::Red)
     };
 
-    let summary = format!("+{:<3} XP  |  +{:<2} SHARDS", xp_gained, shards_gained);
+    let summary = format!("+{:<3}m DIST  |  +{:<2} SHARDS", dist_gained, shards_gained);
     let note = "progress saved";
 
     // Frame 1: Glitch / dissolve random cells

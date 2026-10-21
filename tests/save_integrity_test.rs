@@ -101,29 +101,14 @@ fn test_active_run_persistence_and_resume() {
     let dir = temp_test_dir("active_run");
     let manager = SaveManager::with_dir(dir);
 
-    let mut game = galerne::game::state::GameState::new(80, 24, 0x12345678);
-    game.player.hp = 75.0;
-    game.player.max_hp = 120.0;
-    game.player.x = 25.5;
-    game.player.y = 12.3;
-    game.player.level = 4;
-    game.player.xp = 15;
-    game.player.shards = 8;
-    game.weapon.damage = 35.0;
-    game.weapon.multishot = 2;
-    game.enemies.push(galerne::game::enemies::Enemy::new(
-        10.0,
-        10.0,
-        galerne::game::enemies::EnemyKind::Charger,
-    ));
-    game.gems.push(galerne::game::state::XpGem {
-        x: 5.0,
-        y: 5.0,
-        value: 50,
-        is_shard: true,
-    });
+    let mut runner = galerne::game::runner::RunnerState::new(80, 24, 0x12345678);
+    runner.distance = 125.5;
+    runner.speed = 24.0;
+    runner.score = 350;
+    runner.shards_collected = 18;
+    runner.player.shields = 2;
 
-    let snapshot = game.create_snapshot();
+    let snapshot = runner.create_snapshot();
     let state = SaveState {
         active_run: Some(snapshot),
         ..Default::default()
@@ -135,24 +120,14 @@ fn test_active_run_persistence_and_resume() {
     assert!(loaded.active_run.is_some());
     let loaded_snap = loaded.active_run.unwrap();
 
-    let mut restored_game = galerne::game::state::GameState::new(80, 24, 0);
-    restored_game.resume_snapshot(&loaded_snap);
+    let mut restored_runner = galerne::game::runner::RunnerState::new(80, 24, 0);
+    restored_runner.resume_snapshot(&loaded_snap);
 
-    assert_eq!(restored_game.player.hp, 75.0);
-    assert_eq!(restored_game.player.x, 25.5);
-    assert_eq!(restored_game.player.level, 4);
-    assert_eq!(restored_game.player.shards, 8);
-    assert_eq!(restored_game.weapon.damage, 35.0);
-    assert_eq!(restored_game.weapon.multishot, 2);
-    assert_eq!(restored_game.enemies.len(), 1);
-    assert_eq!(
-        restored_game.enemies[0].kind,
-        galerne::game::enemies::EnemyKind::Charger
-    );
-    assert_eq!(restored_game.gems.len(), 1);
-    assert!(restored_game.gems[0].is_shard);
-    assert_eq!(restored_game.gems[0].value, 50);
-    assert_eq!(restored_game.rng.state(), game.rng.state());
+    assert_eq!(restored_runner.distance, 125.5);
+    assert_eq!(restored_runner.speed, 24.0);
+    assert_eq!(restored_runner.score, 350);
+    assert_eq!(restored_runner.shards_collected, 18);
+    assert_eq!(restored_runner.player.shields, 2);
 }
 
 #[test]

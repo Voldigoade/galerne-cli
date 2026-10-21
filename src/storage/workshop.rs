@@ -1,5 +1,6 @@
 //! Permanent meta-progression upgrades purchased with Gale Shards.
 
+use crate::game::runner::RunnerState;
 use crate::game::state::GameState;
 use crate::storage::schema::{SaveState, WorkshopLevels};
 
@@ -24,11 +25,31 @@ impl WorkshopUpgradeType {
         WorkshopUpgradeType::ShardMultiplier,
     ];
 
+    pub fn title_key(&self) -> &'static str {
+        match self {
+            WorkshopUpgradeType::BaseHealth => "base_health",
+            WorkshopUpgradeType::BaseDamage => "dash_cooldown",
+            WorkshopUpgradeType::MoveSpeed => "move_speed",
+            WorkshopUpgradeType::MagnetRadius => "magnet_radius",
+            WorkshopUpgradeType::ShardMultiplier => "shard_mult",
+        }
+    }
+
+    pub fn desc_key(&self) -> &'static str {
+        match self {
+            WorkshopUpgradeType::BaseHealth => "base_health_desc",
+            WorkshopUpgradeType::BaseDamage => "dash_cooldown_desc",
+            WorkshopUpgradeType::MoveSpeed => "move_speed_desc",
+            WorkshopUpgradeType::MagnetRadius => "magnet_radius_desc",
+            WorkshopUpgradeType::ShardMultiplier => "shard_mult_desc",
+        }
+    }
+
     pub fn title(&self) -> &'static str {
         match self {
-            WorkshopUpgradeType::BaseHealth => "Hull Integrity",
-            WorkshopUpgradeType::BaseDamage => "Plasma Capacitor",
-            WorkshopUpgradeType::MoveSpeed => "Ion Thrusters",
+            WorkshopUpgradeType::BaseHealth => "Wind Shield",
+            WorkshopUpgradeType::BaseDamage => "Thruster Venting",
+            WorkshopUpgradeType::MoveSpeed => "Cruising Drive",
             WorkshopUpgradeType::MagnetRadius => "Collector Coil",
             WorkshopUpgradeType::ShardMultiplier => "Yield Analyzer",
         }
@@ -36,11 +57,11 @@ impl WorkshopUpgradeType {
 
     pub fn description(&self) -> &'static str {
         match self {
-            WorkshopUpgradeType::BaseHealth => "+15 Starting Max HP per rank",
-            WorkshopUpgradeType::BaseDamage => "+10% Weapon Damage per rank",
-            WorkshopUpgradeType::MoveSpeed => "+8% Movement Speed per rank",
-            WorkshopUpgradeType::MagnetRadius => "+20% Pickup Range per rank",
-            WorkshopUpgradeType::ShardMultiplier => "+25% Shard Drop Yield per rank",
+            WorkshopUpgradeType::BaseHealth => "+1 Starting Wind Shield per rank",
+            WorkshopUpgradeType::BaseDamage => "-10% Dash Cooldown per rank",
+            WorkshopUpgradeType::MoveSpeed => "+1.5 m/s Cruising Speed per rank",
+            WorkshopUpgradeType::MagnetRadius => "+2.0m Shard Magnet reach per rank",
+            WorkshopUpgradeType::ShardMultiplier => "+20% Shard Multiplier per rank",
         }
     }
 
@@ -95,6 +116,22 @@ pub fn purchase_workshop_upgrade(state: &mut SaveState, upgrade: WorkshopUpgrade
     state.currency_shards -= cost;
     upgrade.set_level(&mut state.workshop, current_lvl + 1);
     true
+}
+
+/// Applies persistent workshop enhancements to an active runner game state.
+pub fn apply_workshop_to_runner(workshop: &WorkshopLevels, runner: &mut RunnerState) {
+    if workshop.base_health_level > 0 {
+        runner.player.shields += workshop.base_health_level.div_ceil(2);
+    }
+    if workshop.base_damage_level > 0 {
+        runner.player.dash_cooldown_duration *= 1.0 - (workshop.base_damage_level as f32 * 0.08);
+    }
+    if workshop.move_speed_level > 0 {
+        runner.speed += (workshop.move_speed_level as f32) * 1.5;
+    }
+    if workshop.shard_multiplier_level > 0 {
+        runner.flow_multiplier += (workshop.shard_multiplier_level as f32) * 0.20;
+    }
 }
 
 /// Applies persistent workshop enhancements to an active game state.

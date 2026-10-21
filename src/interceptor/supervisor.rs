@@ -7,16 +7,18 @@ use std::time::{Duration, Instant};
 
 use crossterm::event::{Event, KeyCode, KeyModifiers};
 
-use crate::game::state::{GameInput, GameState};
+use crate::game::runner::action::PlayerInput;
+use crate::game::runner::RunnerState;
 use crate::interceptor::history::DurationHistory;
 use crate::interceptor::matcher::match_command;
 use crate::interceptor::process::ProcessSupervisor;
 use crate::interceptor::signal;
 use crate::interceptor::transition::run_completion_transition;
 use crate::storage::manager::SaveManager;
-use crate::storage::workshop::apply_workshop_to_game;
+use crate::storage::workshop::apply_workshop_to_runner;
 use crate::terminal::engine::Engine;
 use crate::terminal::guard::TerminalGuard;
+use crate::ui::i18n::Locale;
 
 /// Runs an eligible developer task, supervising execution and presenting gameplay during wait time.
 /// Returns the exit code of the child process.
@@ -116,29 +118,35 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
     let guard = TerminalGuard::enter()?;
     let mut engine = Engine::new()?;
 
-    // Load or initialize gameplay session
-    let mut game = GameState::new(engine.width(), engine.height(), rand_seed());
-    apply_workshop_to_game(&save_state.workshop, &mut game);
+    let locale = save_state.settings.locale.unwrap_or_else(Locale::detect);
+    let mut game = RunnerState::new(
+        engine.width() as usize,
+        engine.height() as usize,
+        rand_seed(),
+    );
+    apply_workshop_to_runner(&save_state.workshop, &mut game);
 
     // If an active run snapshot exists, resume it with exact deterministic state
     if let Some(ref snapshot) = save_state.active_run {
         game.resume_snapshot(snapshot);
+    } else {
+        save_state.total_runs_started += 1;
     }
 
-    let initial_xp = game.player.xp;
-    let initial_shards = game.player.shards;
+    let initial_shards = game.shards_collected;
+    let initial_dist = game.distance;
 
-    let target_frame_duration = Duration::from_millis(38); // ~26 FPS
+    let target_frame_duration = Duration::from_millis(33); // ~30 FPS
     let mut last_frame = Instant::now();
-    let mut input = GameInput::default();
     let mut left_game_view = false;
     let mut child_completed_in_game = None;
+    let mut next_input = None;
 
     while child_completed_in_game.is_none() && !left_game_view {
         // Check if child process has finished
         if let Some(status) = supervisor.try_wait()? {
             child_completed_in_game = Some(status);
-            break;
+            game.start_completion_transition(status.success());
         }
 
         // Handle user input
@@ -156,32 +164,24 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
                     left_game_view = true;
                     break;
                 }
-                Event::Key(k) => {
-                    if game.pending_level_up {
-                        if let Some(ref mut draft) = game.current_draft {
-                            match k.code {
-                                KeyCode::Up => draft.select_prev(),
-                                KeyCode::Down => draft.select_next(),
-                                KeyCode::Enter => {
-                                    let sel = draft.current_selection();
-                                    game.apply_upgrade(sel);
-                                }
-                                _ => {}
-                            }
-                        }
-                    } else {
-                        match k.code {
-                            KeyCode::Up | KeyCode::Char('w') => input.move_y = -1.0,
-                            KeyCode::Down | KeyCode::Char('s') => input.move_y = 1.0,
-                            KeyCode::Left | KeyCode::Char('a') => input.move_x = -1.0,
-                            KeyCode::Right | KeyCode::Char('d') => input.move_x = 1.0,
-                            _ => {}
-                        }
+                Event::Key(k) => match k.code {
+                    KeyCode::Char(' ') | KeyCode::Up | KeyCode::Char('w') | KeyCode::Char('W') => {
+                        next_input = Some(PlayerInput::Jump);
                     }
-                }
-                Event::Resize(w, h) => {
+                    KeyCode::Down | KeyCode::Char('s') | KeyCode::Char('S') => {
+                        next_input = Some(PlayerInput::Slide);
+                    }
+                    KeyCode::Right
+                    | KeyCode::Char('x')
+                    | KeyCode::Char('X')
+                    | KeyCode::Char('d')
+                    | KeyCode::Char('D') => {
+                        next_input = Some(PlayerInput::Dash);
+                    }
+                    _ => {}
+                },
+                Event::Resize(_w, _h) => {
                     let _ = engine.check_resize();
-                    game.arena = crate::game::arena::Arena::new(w, h);
                 }
                 _ => {}
             }
@@ -196,15 +196,19 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
         let dt = (now - last_frame).as_secs_f32().min(0.1);
         last_frame = now;
 
-        game.update(dt, input);
-        // Reset single-frame input impulses
-        input = GameInput::default();
+        game.update(dt, next_input);
+        next_input = None;
+
+        if game.is_transition_done() {
+            break;
+        }
 
         // Render frame
         if engine.is_too_small() {
             engine.render_too_small_notice();
         } else {
-            game.render(engine.buffer_mut());
+            engine.buffer_mut().clear();
+            game.render(engine.buffer_mut(), locale);
         }
         engine.flush()?;
 
@@ -216,14 +220,14 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
     }
 
     // Calculate progression earned during wait time
-    let xp_gained = game.player.xp.saturating_sub(initial_xp);
-    let shards_gained = game.player.shards.saturating_sub(initial_shards);
+    let dist_gained = (game.distance - initial_dist).max(0.0);
+    let shards_gained = game.shards_collected.saturating_sub(initial_shards);
     let total_duration = start_time.elapsed().as_secs();
 
     // Persist career stats and exact active run
-    save_state.total_play_time_secs += game.run_duration as u64;
+    save_state.total_play_time_secs += total_duration;
     save_state.total_wait_time_saved_secs += total_duration;
-    save_state.total_enemies_killed += game.enemies_killed;
+    save_state.total_distance_traveled += dist_gained;
     save_state.currency_shards += shards_gained;
 
     if game.is_game_over {
@@ -242,7 +246,12 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
     if let Some(status) = child_completed_in_game {
         // Child completed while in game view: play brief completion transition
         let true_duration = start_time.elapsed().as_secs_f32();
-        run_completion_transition(&mut engine, status.success(), xp_gained, shards_gained);
+        run_completion_transition(
+            &mut engine,
+            status.success(),
+            dist_gained as u32,
+            shards_gained,
+        );
 
         // Restore terminal to cooked mode
         drop(guard);

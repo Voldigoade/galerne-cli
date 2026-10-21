@@ -3,11 +3,13 @@
 use serde::{Deserialize, Serialize};
 
 use crate::game::enemies::Enemy;
+use crate::game::runner::RunnerSnapshot;
 use crate::game::state::XpGem;
 use crate::game::upgrades::UpgradeDraft;
 use crate::game::weapons::Projectile;
+use crate::ui::i18n::Locale;
 
-pub const CURRENT_SCHEMA_VERSION: u32 = 1;
+pub const CURRENT_SCHEMA_VERSION: u32 = 2;
 
 /// The complete persistent game state.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -16,11 +18,15 @@ pub struct SaveState {
     pub total_play_time_secs: u64,
     pub total_wait_time_saved_secs: u64,
     pub total_runs_started: u32,
+    #[serde(default)]
+    pub total_distance_traveled: f32,
+    #[serde(default)]
     pub total_enemies_killed: u32,
+    #[serde(default)]
     pub total_bosses_killed: u32,
     pub currency_shards: u32,
     pub workshop: WorkshopLevels,
-    pub active_run: Option<ActiveRunSnapshot>,
+    pub active_run: Option<RunnerSnapshot>,
     pub settings: GameSettings,
 }
 
@@ -31,6 +37,7 @@ impl Default for SaveState {
             total_play_time_secs: 0,
             total_wait_time_saved_secs: 0,
             total_runs_started: 0,
+            total_distance_traveled: 0.0,
             total_enemies_killed: 0,
             total_bosses_killed: 0,
             currency_shards: 0,
@@ -92,6 +99,8 @@ pub struct GameSettings {
     pub animations_enabled: bool,
     pub auto_activate: bool,
     pub anti_flicker_delay_ms: u64,
+    #[serde(default)]
+    pub locale: Option<Locale>,
 }
 
 impl Default for GameSettings {
@@ -101,6 +110,7 @@ impl Default for GameSettings {
             animations_enabled: true,
             auto_activate: true,
             anti_flicker_delay_ms: 8000, // 8.0s conservative fallback delay for unknown/short tasks
+            locale: None,
         }
     }
 }

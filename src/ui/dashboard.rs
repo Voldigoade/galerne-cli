@@ -7,16 +7,19 @@ use std::time::{Duration, Instant};
 
 use crossterm::event::{Event, KeyCode, KeyModifiers};
 
-use crate::game::state::{FastRng, GameInput, GameState};
+use crate::game::runner::action::PlayerInput;
+use crate::game::runner::RunnerState;
+use crate::game::state::FastRng;
 use crate::shell::doctor::collect_diagnostics;
 use crate::storage::manager::SaveManager;
 use crate::storage::stats::format_career_stats;
 use crate::storage::workshop::{
-    apply_workshop_to_game, purchase_workshop_upgrade, WorkshopUpgradeType,
+    apply_workshop_to_runner, purchase_workshop_upgrade, WorkshopUpgradeType,
 };
 use crate::terminal::buffer::{Color, Style};
 use crate::terminal::engine::Engine;
 use crate::terminal::guard::TerminalGuard;
+use crate::ui::i18n::{t, Locale};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum DashboardTab {
@@ -42,16 +45,16 @@ impl DashboardTab {
         DashboardTab::Exit,
     ];
 
-    fn label(&self) -> &'static str {
+    fn label(&self, locale: Locale) -> &'static str {
         match self {
-            DashboardTab::Play => "PLAY",
-            DashboardTab::Workshop => "WORKSHOP",
-            DashboardTab::Stats => "STATS",
-            DashboardTab::Saves => "SAVES",
-            DashboardTab::Doctor => "DOCTOR",
-            DashboardTab::Settings => "SETTINGS",
-            DashboardTab::Help => "HELP",
-            DashboardTab::Exit => "EXIT",
+            DashboardTab::Play => t("menu_play", locale),
+            DashboardTab::Workshop => t("menu_workshop", locale),
+            DashboardTab::Stats => t("menu_stats", locale),
+            DashboardTab::Saves => t("menu_saves", locale),
+            DashboardTab::Doctor => t("menu_doctor", locale),
+            DashboardTab::Settings => t("menu_settings", locale),
+            DashboardTab::Help => t("menu_help", locale),
+            DashboardTab::Exit => t("menu_exit", locale),
         }
     }
 }
@@ -72,6 +75,8 @@ pub fn run_dashboard() -> io::Result<()> {
     let mut status_banner: Option<(String, Instant)> = None;
 
     loop {
+        let locale = save_state.settings.locale.unwrap_or_else(Locale::detect);
+
         if engine.is_too_small() {
             engine.render_too_small_notice();
             engine.flush()?;
@@ -148,7 +153,7 @@ pub fn run_dashboard() -> io::Result<()> {
             } else {
                 "  "
             };
-            let line = format!("{}{:<14}", prefix, tab.label());
+            let line = format!("{}{:<14}", prefix, tab.label(locale));
 
             let style = if is_sel {
                 if focus_panel {
@@ -172,43 +177,30 @@ pub fn run_dashboard() -> io::Result<()> {
                 buf.draw_str_styled(
                     px,
                     py,
-                    "DEPLOYMENT CONTROLS",
+                    t("deploy_operation", locale),
                     Style::new(Color::Yellow, bg).bold(),
                 );
                 if let Some(ref run) = save_state.active_run {
-                    buf.draw_str(
-                        px,
-                        py + 2,
-                        "Active Operation in Progress (interrupted):",
-                        Color::White,
-                        bg,
-                    );
+                    buf.draw_str(px, py + 2, t("active_run_desc", locale), Color::White, bg);
                     let info = format!(
-                        "Wave {}  |  Level {}  |  HP {:.0}/{:.0}  |  Enemies Active: {}  |  Projectiles: {}",
-                        run.wave,
-                        run.player_level,
-                        run.player_hp,
-                        run.player_max_hp,
-                        run.enemies.len(),
-                        run.projectiles.len()
+                        "Distance: {:.0}m  |  Speed: {:.0}  |  Score: {}  |  Shards: {}  |  Shields: {}",
+                        run.distance,
+                        run.speed,
+                        run.score,
+                        run.shards_collected,
+                        run.player_shields
                     );
                     buf.draw_str_styled(px, py + 3, &info, Style::new(Color::Cyan, bg).bold());
                     buf.draw_str(
                         px,
                         py + 5,
-                        "Press Enter to Resume Operation exactly where left off.",
+                        t("press_enter_resume", locale),
                         Color::Green,
                         bg,
                     );
                 } else {
                     buf.draw_str(px, py + 2, "System Status: Idle", Color::White, bg);
-                    buf.draw_str(
-                        px,
-                        py + 3,
-                        "Press Enter to launch a manual combat deployment.",
-                        Color::DarkGrey,
-                        bg,
-                    );
+                    buf.draw_str(px, py + 3, t("controls_hint", locale), Color::DarkGrey, bg);
                     let shards_str =
                         format!("Gale Shards Available: {}", save_state.currency_shards);
                     buf.draw_str_styled(
@@ -221,7 +213,8 @@ pub fn run_dashboard() -> io::Result<()> {
             }
             DashboardTab::Workshop => {
                 let w_header = format!(
-                    "WORKSHOP ENHANCEMENTS — {} SHARDS",
+                    "{} — {} SHARDS",
+                    t("workshop_title", locale),
                     save_state.currency_shards
                 );
                 buf.draw_str_styled(px, py, &w_header, Style::new(Color::Yellow, bg).bold());
@@ -232,15 +225,15 @@ pub fn run_dashboard() -> io::Result<()> {
                     let is_sel = idx == workshop_idx && focus_panel;
 
                     let cost_str = if lvl >= up_type.max_level() {
-                        "MAX".to_string()
+                        t("max_level", locale).to_string()
                     } else {
                         format!("{} Shards", up_type.cost(lvl))
                     };
 
                     let line = format!(
-                        "{} {:<18} Rank {}/5  [{}]",
+                        "{} {:<20} Rank {}/5  [{}]",
                         if is_sel { "▶" } else { " " },
-                        up_type.title(),
+                        t(up_type.title_key(), locale),
                         lvl,
                         cost_str
                     );
@@ -365,14 +358,22 @@ pub fn run_dashboard() -> io::Result<()> {
                 buf.draw_str_styled(
                     px,
                     py,
-                    "PREFERENCES (INTERACTIVE)",
+                    t("settings_title", locale),
                     Style::new(Color::Yellow, bg).bold(),
                 );
                 let s = &save_state.settings;
 
+                let lang_val = match s.locale {
+                    None => "Auto (System)",
+                    Some(Locale::En) => "English",
+                    Some(Locale::Fr) => "Français",
+                    Some(Locale::Es) => "Español",
+                    Some(Locale::ZhCn) => "简体中文",
+                };
+
                 let settings_rows = [
                     (
-                        "Color Mode",
+                        t("color_effects", locale),
                         if s.color_enabled {
                             "Enabled"
                         } else {
@@ -381,7 +382,7 @@ pub fn run_dashboard() -> io::Result<()> {
                         "[Enter/Space]: toggle",
                     ),
                     (
-                        "Transition Animations",
+                        t("animations", locale),
                         if s.animations_enabled {
                             "Enabled"
                         } else {
@@ -390,7 +391,7 @@ pub fn run_dashboard() -> io::Result<()> {
                         "[Enter/Space]: toggle",
                     ),
                     (
-                        "Auto-Activation",
+                        t("auto_activate", locale),
                         if s.auto_activate {
                             "Enabled"
                         } else {
@@ -399,9 +400,14 @@ pub fn run_dashboard() -> io::Result<()> {
                         "[Enter/Space]: toggle",
                     ),
                     (
-                        "Anti-Flicker Threshold",
+                        t("anti_flicker_delay", locale),
                         &format!("{} ms", s.anti_flicker_delay_ms),
                         "[Enter/Space/←/→]: cycle duration",
+                    ),
+                    (
+                        t("language", locale),
+                        lang_val,
+                        "[Enter/Space/←/→]: cycle language",
                     ),
                 ];
 
@@ -410,7 +416,7 @@ pub fn run_dashboard() -> io::Result<()> {
                     let is_sel = idx == settings_idx && focus_panel;
 
                     let line = format!(
-                        "{} {:<24} {:<10} {}",
+                        "{} {:<24} {:<14} {}",
                         if is_sel { "▶" } else { " " },
                         format!("{}:", label),
                         val,
@@ -429,7 +435,7 @@ pub fn run_dashboard() -> io::Result<()> {
 
                 buf.draw_str(
                     px,
-                    py + 12,
+                    py + 13,
                     "↑/↓: navigate   Enter/Space/←/→: change setting   Tab/Esc: back to menu",
                     Color::DarkGrey,
                     bg,
@@ -566,7 +572,7 @@ pub fn run_dashboard() -> io::Result<()> {
                                 }
                                 DashboardTab::Settings => {
                                     settings_idx = if settings_idx == 0 {
-                                        3
+                                        4
                                     } else {
                                         settings_idx - 1
                                     };
@@ -595,7 +601,7 @@ pub fn run_dashboard() -> io::Result<()> {
                                         (workshop_idx + 1) % WorkshopUpgradeType::ALL.len();
                                 }
                                 DashboardTab::Settings => {
-                                    settings_idx = (settings_idx + 1) % 4;
+                                    settings_idx = (settings_idx + 1) % 5;
                                 }
                                 DashboardTab::Saves => {
                                     let archives = save_manager.list_archives().unwrap_or_default();
@@ -758,9 +764,9 @@ fn toggle_or_adjust_setting(
             save_state.settings.auto_activate = !save_state.settings.auto_activate;
         }
         3 => {
-            let thresholds = [1000u64, 1500, 2000, 2500, 3000, 4000, 5000];
+            let thresholds = [1000u64, 1500, 2000, 2500, 3000, 4000, 5000, 8000];
             let current = save_state.settings.anti_flicker_delay_ms;
-            let current_pos = thresholds.iter().position(|&t| t == current).unwrap_or(3);
+            let current_pos = thresholds.iter().position(|&t| t == current).unwrap_or(7);
             let new_pos = if delta > 0 {
                 (current_pos + 1) % thresholds.len()
             } else if current_pos == 0 {
@@ -769,6 +775,25 @@ fn toggle_or_adjust_setting(
                 current_pos - 1
             };
             save_state.settings.anti_flicker_delay_ms = thresholds[new_pos];
+        }
+        4 => {
+            let locales = [
+                None,
+                Some(Locale::En),
+                Some(Locale::Fr),
+                Some(Locale::Es),
+                Some(Locale::ZhCn),
+            ];
+            let current = save_state.settings.locale;
+            let current_pos = locales.iter().position(|&l| l == current).unwrap_or(0);
+            let new_pos = if delta > 0 {
+                (current_pos + 1) % locales.len()
+            } else if current_pos == 0 {
+                locales.len() - 1
+            } else {
+                current_pos - 1
+            };
+            save_state.settings.locale = locales[new_pos];
         }
         _ => {}
     }
@@ -789,18 +814,26 @@ pub fn run_manual_game(
     save_manager: &SaveManager,
     save_state: &mut crate::storage::schema::SaveState,
 ) -> io::Result<()> {
-    let mut game = GameState::new(engine.width(), engine.height(), rand_seed());
-    apply_workshop_to_game(&save_state.workshop, &mut game);
+    let locale = save_state.settings.locale.unwrap_or_else(Locale::detect);
+    let mut game = RunnerState::new(
+        engine.width() as usize,
+        engine.height() as usize,
+        rand_seed(),
+    );
+    apply_workshop_to_runner(&save_state.workshop, &mut game);
 
     if let Some(ref snapshot) = save_state.active_run {
         game.resume_snapshot(snapshot);
+    } else {
+        save_state.total_runs_started += 1;
     }
 
     let start = Instant::now();
-    let initial_shards = game.player.shards;
-    let target_frame_duration = Duration::from_millis(38); // ~26 FPS
+    let initial_shards = game.shards_collected;
+    let initial_dist = game.distance;
+    let target_frame_duration = Duration::from_millis(33); // ~30 FPS
     let mut last_frame = Instant::now();
-    let mut input = GameInput::default();
+    let mut next_input = None;
 
     loop {
         while let Some(ev) = Engine::poll_event(Duration::from_millis(0))? {
@@ -808,7 +841,9 @@ pub fn run_manual_game(
                 Event::Key(k) if k.code == KeyCode::Esc || k.code == KeyCode::Char('q') => {
                     // Save and exit back to menu
                     save_state.total_play_time_secs += start.elapsed().as_secs();
-                    save_state.currency_shards += game.player.shards.saturating_sub(initial_shards);
+                    save_state.currency_shards +=
+                        game.shards_collected.saturating_sub(initial_shards);
+                    save_state.total_distance_traveled += (game.distance - initial_dist).max(0.0);
                     if game.is_game_over {
                         save_state.active_run = None;
                     } else {
@@ -827,7 +862,9 @@ pub fn run_manual_game(
                         && k.code == KeyCode::Char('c') =>
                 {
                     save_state.total_play_time_secs += start.elapsed().as_secs();
-                    save_state.currency_shards += game.player.shards.saturating_sub(initial_shards);
+                    save_state.currency_shards +=
+                        game.shards_collected.saturating_sub(initial_shards);
+                    save_state.total_distance_traveled += (game.distance - initial_dist).max(0.0);
                     if !game.is_game_over {
                         save_state.active_run = Some(game.create_snapshot());
                     }
@@ -839,32 +876,24 @@ pub fn run_manual_game(
                     }
                     return Ok(());
                 }
-                Event::Key(k) => {
-                    if game.pending_level_up {
-                        if let Some(ref mut draft) = game.current_draft {
-                            match k.code {
-                                KeyCode::Up => draft.select_prev(),
-                                KeyCode::Down => draft.select_next(),
-                                KeyCode::Enter => {
-                                    let sel = draft.current_selection();
-                                    game.apply_upgrade(sel);
-                                }
-                                _ => {}
-                            }
-                        }
-                    } else {
-                        match k.code {
-                            KeyCode::Up | KeyCode::Char('w') => input.move_y = -1.0,
-                            KeyCode::Down | KeyCode::Char('s') => input.move_y = 1.0,
-                            KeyCode::Left | KeyCode::Char('a') => input.move_x = -1.0,
-                            KeyCode::Right | KeyCode::Char('d') => input.move_x = 1.0,
-                            _ => {}
-                        }
+                Event::Key(k) => match k.code {
+                    KeyCode::Char(' ') | KeyCode::Up | KeyCode::Char('w') | KeyCode::Char('W') => {
+                        next_input = Some(PlayerInput::Jump);
                     }
-                }
-                Event::Resize(w, h) => {
+                    KeyCode::Down | KeyCode::Char('s') | KeyCode::Char('S') => {
+                        next_input = Some(PlayerInput::Slide);
+                    }
+                    KeyCode::Right
+                    | KeyCode::Char('x')
+                    | KeyCode::Char('X')
+                    | KeyCode::Char('d')
+                    | KeyCode::Char('D') => {
+                        next_input = Some(PlayerInput::Dash);
+                    }
+                    _ => {}
+                },
+                Event::Resize(_w, _h) => {
                     let _ = engine.check_resize();
-                    game.arena = crate::game::arena::Arena::new(w, h);
                 }
                 _ => {}
             }
@@ -874,13 +903,23 @@ pub fn run_manual_game(
         let dt = (now - last_frame).as_secs_f32().min(0.1);
         last_frame = now;
 
-        game.update(dt, input);
-        input = GameInput::default();
+        game.update(dt, next_input);
+        next_input = None;
+
+        if game.is_game_over {
+            save_state.total_play_time_secs += start.elapsed().as_secs();
+            save_state.currency_shards += game.shards_collected.saturating_sub(initial_shards);
+            save_state.total_distance_traveled += (game.distance - initial_dist).max(0.0);
+            save_state.active_run = None;
+            let _ = save_manager.save(save_state);
+            return Ok(());
+        }
 
         if engine.is_too_small() {
             engine.render_too_small_notice();
         } else {
-            game.render(engine.buffer_mut());
+            engine.buffer_mut().clear();
+            game.render(engine.buffer_mut(), locale);
         }
         engine.flush()?;
 

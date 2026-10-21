@@ -15,10 +15,11 @@ fn test_windows_update_preserves_save_data_and_settings() {
 
     // Create existing save state with high progression
     let existing_state = SaveState {
-        version: 1,
+        version: 2,
         total_play_time_secs: 5500,
         total_wait_time_saved_secs: 3200,
         total_runs_started: 35,
+        total_distance_traveled: 4200.0,
         total_enemies_killed: 2400,
         total_bosses_killed: 12,
         currency_shards: 8900,
@@ -35,6 +36,7 @@ fn test_windows_update_preserves_save_data_and_settings() {
             animations_enabled: true,
             auto_activate: false, // User explicitly set to false
             anti_flicker_delay_ms: 8000,
+            locale: None,
         },
     };
 

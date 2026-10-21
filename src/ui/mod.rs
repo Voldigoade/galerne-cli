@@ -2,6 +2,7 @@
 
 pub mod cli;
 pub mod dashboard;
+pub mod i18n;
 
 pub use cli::{parse_cli_action, print_help, CliAction};
 pub use dashboard::run_dashboard;

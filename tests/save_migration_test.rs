@@ -2,12 +2,6 @@ use std::fs;
 
 use galerne::storage::atomic::{decode_and_verify, encode_with_header};
 use galerne::storage::manager::SaveManager;
-use galerne::storage::schema::{GameSettings, SaveState, WorkshopLevels};
-
-fn create_v1_save_bytes(state: &SaveState) -> Vec<u8> {
-    let payload = serde_json::to_vec(state).expect("serialize v1");
-    encode_with_header(1, &payload)
-}
 
 #[test]
 fn test_v1_save_fixture_loads_perfectly() {
@@ -18,40 +12,123 @@ fn test_v1_save_fixture_loads_perfectly() {
     let manager = SaveManager::with_dir(&temp_dir);
 
     // Create a rich v1 save fixture representing actual v0.1.1 player data
-    let original = SaveState {
-        version: 1,
-        total_play_time_secs: 1420,
-        total_wait_time_saved_secs: 980,
-        total_runs_started: 14,
-        total_enemies_killed: 450,
-        total_bosses_killed: 3,
-        currency_shards: 1250,
-        workshop: WorkshopLevels {
-            base_health_level: 2,
-            base_damage_level: 3,
-            move_speed_level: 1,
-            magnet_radius_level: 2,
-            shard_multiplier_level: 1,
+    let v1_json = serde_json::json!({
+        "version": 1,
+        "total_play_time_secs": 1420,
+        "total_wait_time_saved_secs": 980,
+        "total_runs_started": 14,
+        "total_enemies_killed": 450,
+        "total_bosses_killed": 3,
+        "currency_shards": 1250,
+        "workshop": {
+            "base_health_level": 2,
+            "base_damage_level": 3,
+            "move_speed_level": 1,
+            "magnet_radius_level": 2,
+            "shard_multiplier_level": 1
         },
-        active_run: None,
-        settings: GameSettings {
-            color_enabled: true,
-            animations_enabled: true,
-            auto_activate: true,
-            anti_flicker_delay_ms: 2500,
-        },
-    };
+        "active_run": null,
+        "settings": {
+            "color_enabled": true,
+            "animations_enabled": true,
+            "auto_activate": true,
+            "anti_flicker_delay_ms": 2500
+        }
+    });
 
-    let encoded_v1 = create_v1_save_bytes(&original);
+    let payload = serde_json::to_vec(&v1_json).expect("serialize v1");
+    let encoded_v1 = encode_with_header(1, &payload);
     fs::write(manager.primary_save_path(), &encoded_v1).expect("write v1 save");
 
-    // Load must parse cleanly without modification
+    // Load must migrate cleanly from v1 to v2 while preserving all progression
     let loaded = manager.load().expect("load v1 save");
-    assert_eq!(loaded.version, 1);
+    assert_eq!(loaded.version, 2);
     assert_eq!(loaded.currency_shards, 1250);
     assert_eq!(loaded.total_enemies_killed, 450);
     assert_eq!(loaded.workshop.base_damage_level, 3);
     assert!(loaded.settings.auto_activate);
+    assert!(loaded.active_run.is_none());
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[test]
+fn test_v1_save_with_arena_active_run_migrates_cleanly_to_v2() {
+    let temp_dir =
+        std::env::temp_dir().join(format!("galerne_v1_arena_mig_{}", std::process::id()));
+    let _ = fs::remove_dir_all(&temp_dir);
+    fs::create_dir_all(&temp_dir).expect("create temp dir");
+
+    let manager = SaveManager::with_dir(&temp_dir);
+
+    // Raw JSON payload of a v1 save with arena active run
+    let v1_json = serde_json::json!({
+        "version": 1,
+        "total_play_time_secs": 250,
+        "total_wait_time_saved_secs": 180,
+        "total_runs_started": 5,
+        "total_enemies_killed": 90,
+        "total_bosses_killed": 1,
+        "currency_shards": 420,
+        "workshop": {
+            "base_health_level": 1,
+            "base_damage_level": 2,
+            "move_speed_level": 0,
+            "magnet_radius_level": 1,
+            "shard_multiplier_level": 0
+        },
+        "active_run": {
+            "player_hp": 80.0,
+            "player_max_hp": 100.0,
+            "player_x": 40.0,
+            "player_y": 12.0,
+            "player_speed": 18.0,
+            "player_magnet_radius": 5.0,
+            "player_level": 2,
+            "player_xp": 10,
+            "player_next_level_xp": 20,
+            "shards_collected": 15,
+            "weapon_damage": 25.0,
+            "weapon_cooldown": 0.5,
+            "weapon_cooldown_remaining": 0.1,
+            "weapon_multishot": 1,
+            "weapon_piercing": 1,
+            "weapon_speed": 40.0,
+            "weapon_range": 30.0,
+            "wave": 1,
+            "wave_timer": 15.0,
+            "spawn_timer": 0.5,
+            "run_duration": 15.0,
+            "enemies_killed": 12,
+            "boss_spawned": false,
+            "rng_state": 12345,
+            "enemies": [],
+            "projectiles": [],
+            "gems": [],
+            "pending_level_up": false,
+            "current_draft": null
+        },
+        "settings": {
+            "color_enabled": true,
+            "animations_enabled": true,
+            "auto_activate": true,
+            "anti_flicker_delay_ms": 8000
+        }
+    });
+
+    let payload = serde_json::to_vec(&v1_json).expect("serialize v1 json");
+    let encoded = encode_with_header(1, &payload);
+    fs::write(manager.primary_save_path(), &encoded).expect("write v1 save");
+
+    let loaded = manager.load().expect("load and migrate");
+    assert_eq!(loaded.version, 2);
+    assert_eq!(loaded.currency_shards, 420);
+    assert_eq!(loaded.total_enemies_killed, 90);
+    assert_eq!(loaded.workshop.base_damage_level, 2);
+    assert!(
+        loaded.active_run.is_none(),
+        "Old arena active run must be cleanly discarded on v2 migration"
+    );
 
     let _ = fs::remove_dir_all(&temp_dir);
 }
@@ -65,13 +142,13 @@ fn test_pre_migration_backup_creation() {
 
     let manager = SaveManager::with_dir(&temp_dir);
 
-    let original = SaveState {
-        version: 1,
-        total_play_time_secs: 500,
-        currency_shards: 300,
-        ..Default::default()
-    };
-    let encoded_v1 = create_v1_save_bytes(&original);
+    let v1_json = serde_json::json!({
+        "version": 1,
+        "total_play_time_secs": 500,
+        "currency_shards": 300
+    });
+    let payload = serde_json::to_vec(&v1_json).expect("serialize v1");
+    let encoded_v1 = encode_with_header(1, &payload);
     fs::write(manager.primary_save_path(), &encoded_v1).expect("write v1 save");
 
     // Perform migration backup verification
@@ -93,8 +170,8 @@ fn test_pre_migration_backup_creation() {
     let backup_bytes = fs::read(&backup_path).expect("read backup");
     let (ver, payload) = decode_and_verify(&backup_bytes).expect("verify backup");
     assert_eq!(ver, 1);
-    let parsed: SaveState = serde_json::from_slice(payload).expect("parse backup payload");
-    assert_eq!(parsed.currency_shards, 300);
+    let parsed: serde_json::Value = serde_json::from_slice(payload).expect("parse backup payload");
+    assert_eq!(parsed["currency_shards"], 300);
 
     let _ = fs::remove_dir_all(&temp_dir);
 }
