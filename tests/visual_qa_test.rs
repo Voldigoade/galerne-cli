@@ -66,6 +66,7 @@ fn cache_action_prompt_is_rendered_in_each_supported_locale() {
             ground_y,
             LandmarkKind::SecretCache { opened: false },
         )],
+        walkways: Vec::new(),
     });
 
     for (locale, expected) in [
@@ -105,6 +106,7 @@ fn cache_relics_stay_out_of_sight_until_the_cache_is_opened() {
             ground_y,
             LandmarkKind::SecretCache { opened: false },
         )],
+        walkways: Vec::new(),
     });
 
     let mut buf = Buffer::new(80, 24);
@@ -201,6 +203,40 @@ fn next_checkpoint_advances_when_the_current_one_is_reached() {
     game.render(&mut buf, Locale::En);
 
     assert!(buffer_to_string(&buf).contains("NEXT STOP: Lift shaft door"));
+}
+
+#[test]
+fn first_region_renders_a_raised_walkway_above_the_lower_track() {
+    let mut game = RunnerState::new(236, 53, 0x12345678);
+    game.distance = 160.0;
+    game.world.update(160.0);
+    game.player.y = game.world.ground_y as f32 - 5.0;
+
+    let mut buf = Buffer::new(236, 53);
+    game.render(&mut buf, Locale::En);
+
+    println!(
+        "--- VISUAL QA: RAISED SPAN (236x53) ---\n{}",
+        buffer_to_string(&buf)
+    );
+    assert_eq!(buf.get(65, 43).unwrap().ch, '=');
+}
+
+#[test]
+fn raised_walkway_remains_readable_at_minimum_terminal_size() {
+    let mut game = RunnerState::new(80, 24, 0x12345678);
+    game.distance = 160.0;
+    game.world.update(160.0);
+    game.player.y = game.world.ground_y as f32 - 5.0;
+
+    let mut buf = Buffer::new(80, 24);
+    game.render(&mut buf, Locale::En);
+
+    println!(
+        "--- VISUAL QA: RAISED SPAN (80x24) ---\n{}",
+        buffer_to_string(&buf)
+    );
+    assert_eq!(buf.get(51, 14).unwrap().ch, '=');
 }
 
 #[test]

@@ -74,6 +74,21 @@ fn test_parallax_scroll_layers_move_at_distinct_rates() {
 }
 
 #[test]
+fn suspended_span_has_no_gap_at_chunk_boundaries_and_tracks_resize() {
+    let mut world = ChunkWorld::new(0x1337, 80, 24);
+
+    assert_eq!(world.walkway_y_at(161.9), None);
+    assert_eq!(world.walkway_y_at(162.0), Some(14.0));
+    assert_eq!(world.walkway_y_at(199.9), Some(14.0));
+    assert_eq!(world.walkway_y_at(200.0), Some(14.0));
+    assert_eq!(world.walkway_y_at(239.9), Some(14.0));
+    assert_eq!(world.walkway_y_at(240.0), None);
+
+    world.resize(80, 30);
+    assert_eq!(world.walkway_y_at(200.0), Some(20.0));
+}
+
+#[test]
 fn test_obstacles_maintain_minimum_reaction_gap() {
     let mut world = ChunkWorld::new(0x999, 120, 28);
     world.ensure_chunks_generated(500.0);

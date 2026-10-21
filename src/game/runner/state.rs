@@ -6,10 +6,10 @@ use unicode_width::UnicodeWidthStr;
 
 use super::action::{ActionState, PlayerInput};
 use super::items::{FloatingIndicator, ItemKind};
-use super::player::{RunnerPlayer, PLAYER_SPRITE_LEFT_OFFSET};
+use super::player::{RunnerPlayer, PLAYER_SPRITE_LEFT_OFFSET, PLAYER_WIDTH};
 use super::region::{sector_for_distance, SectorKind};
 use super::wind::{TailwindTier, WindKind};
-use super::world::{Chunk, ChunkWorld, LandmarkKind, CHECKPOINTS, CHUNK_WIDTH};
+use super::world::{Chunk, ChunkWorld, LandmarkKind, Walkway, CHECKPOINTS, CHUNK_WIDTH};
 use crate::terminal::buffer::{Buffer, Color, Style};
 use crate::ui::i18n::{t, Locale};
 
@@ -132,11 +132,22 @@ impl RunnerState {
     }
 
     pub fn resize(&mut self, new_w: usize, new_h: usize) {
+        let old_ground_y = self.world.ground_y as f32;
+        let player_world_x = self.world.scroll_x + self.player.x + PLAYER_WIDTH as f32 / 2.0;
+        let old_platform_y = self.world.walkway_y_at(player_world_x);
+        let on_platform =
+            old_platform_y.is_some_and(|surface_y| self.player.is_on_ground(surface_y));
+        let on_ground = self.player.is_on_ground(old_ground_y);
         self.world.resize(new_w, new_h);
         let ground_y = self.world.ground_y as f32;
         self.player.x = (new_w as f32 * 0.22).clamp(8.0, 25.0);
-        if self.player.is_on_ground(ground_y) {
-            self.player.y = ground_y;
+        if on_platform || on_ground {
+            let new_world_x = self.world.scroll_x + self.player.x + PLAYER_WIDTH as f32 / 2.0;
+            self.player.y = if on_platform {
+                self.world.walkway_y_at(new_world_x).unwrap_or(ground_y)
+            } else {
+                ground_y
+            };
         }
     }
 
@@ -293,9 +304,14 @@ impl RunnerState {
 
         self.run_duration += dt;
         let ground_y = self.world.ground_y as f32;
+        let player_world_x = self.world.scroll_x + self.player.x + PLAYER_WIDTH as f32 / 2.0;
+        let current_platform_y = self.world.walkway_y_at(player_world_x);
 
         if let Some(inp) = input {
-            self.player.handle_input(inp, ground_y);
+            let input_surface_y = current_platform_y
+                .filter(|surface_y| self.player.is_on_ground(*surface_y))
+                .unwrap_or(ground_y);
+            self.player.handle_input(inp, input_surface_y);
         }
 
         if self.active_magnet_timer > 0.0 {
@@ -323,7 +339,9 @@ impl RunnerState {
         let dx = effective_speed * dt;
         self.distance += dx;
         self.world.update(dx);
-        self.player.update(dt, ground_y);
+        let player_world_x = self.world.scroll_x + self.player.x + PLAYER_WIDTH as f32 / 2.0;
+        let platform_y = self.world.walkway_y_at(player_world_x);
+        self.player.update_with_platform(dt, ground_y, platform_y);
 
         self.floating_indicators.retain_mut(|ind| ind.update(dt));
 
@@ -665,6 +683,13 @@ impl RunnerState {
             .parallax
             .render_backdrop(buf, ground_y, self.relay_restored);
 
+        for chunk in self.world.active_chunks() {
+            let chunk_start_x = (chunk.index * CHUNK_WIDTH) as f32;
+            for walkway in &chunk.walkways {
+                render_walkway(buf, chunk_start_x, self.world.scroll_x, ground_y, walkway);
+            }
+        }
+
         let current_sector = sector_for_distance(self.distance);
         if current_sector == SectorKind::InteriorGantry {
             let ceiling_y = ground_y.saturating_sub(8);
@@ -971,4 +996,46 @@ fn checkpoint_name(name_key: &str, locale: Locale) -> String {
         _ => return name_key.to_owned(),
     };
     t(key, locale).to_owned()
+}
+
+fn render_walkway(
+    buf: &mut Buffer,
+    chunk_start_x: f32,
+    scroll_x: f32,
+    ground_y: usize,
+    walkway: &Walkway,
+) {
+    let deck_y = (ground_y as f32 - walkway.rise).round() as i32;
+    if deck_y < 4 || deck_y >= buf.height() as i32 {
+        return;
+    }
+
+    let start_x = chunk_start_x + walkway.start_rel_x - scroll_x;
+    let end_x = chunk_start_x + walkway.end_rel_x - scroll_x;
+    let first_x = (start_x.ceil() as i32).max(0);
+    let end_x = (end_x.ceil() as i32).min(buf.width() as i32);
+
+    for screen_x in first_x..end_x {
+        let world_x = screen_x as f32 + scroll_x;
+        let local_x = (world_x - chunk_start_x - walkway.start_rel_x).floor() as usize;
+        let anchor = local_x.is_multiple_of(10);
+        if anchor {
+            for cable_y in (deck_y - 4)..deck_y {
+                buf.set_char(
+                    screen_x as u16,
+                    cable_y as u16,
+                    '|',
+                    Color::DarkGrey,
+                    Color::Black,
+                );
+            }
+        }
+        buf.set_char(
+            screen_x as u16,
+            deck_y as u16,
+            if anchor { '+' } else { '=' },
+            Color::DarkGrey,
+            Color::Black,
+        );
+    }
 }

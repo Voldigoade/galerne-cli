@@ -63,6 +63,23 @@ impl Landmark {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Walkway {
+    pub start_rel_x: f32,
+    pub end_rel_x: f32,
+    pub rise: f32,
+}
+
+impl Walkway {
+    pub fn new(start_rel_x: f32, end_rel_x: f32, rise: f32) -> Self {
+        Self {
+            start_rel_x,
+            end_rel_x,
+            rise,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Chunk {
     pub index: usize,
     pub obstacles: Vec<Obstacle>,
@@ -71,6 +88,8 @@ pub struct Chunk {
     pub wind_currents: Vec<WindCurrent>,
     #[serde(default)]
     pub landmarks: Vec<Landmark>,
+    #[serde(default)]
+    pub walkways: Vec<Walkway>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -107,6 +126,25 @@ impl ChunkWorld {
 
     pub fn active_chunks_mut(&mut self) -> &mut [Chunk] {
         &mut self.chunks
+    }
+
+    pub fn walkway_y_at(&self, world_x: f32) -> Option<f32> {
+        if world_x < 0.0 {
+            return None;
+        }
+
+        let chunk_index = (world_x / CHUNK_WIDTH as f32).floor() as usize;
+        let chunk = self
+            .chunks
+            .iter()
+            .find(|chunk| chunk.index == chunk_index)?;
+        let local_x = world_x - (chunk_index * CHUNK_WIDTH) as f32;
+
+        chunk
+            .walkways
+            .iter()
+            .find(|walkway| local_x >= walkway.start_rel_x && local_x < walkway.end_rel_x)
+            .map(|walkway| self.ground_y as f32 - walkway.rise)
     }
 
     pub fn resize(&mut self, new_w: usize, new_h: usize) {
@@ -150,6 +188,7 @@ impl ChunkWorld {
         let mut items = Vec::new();
         let mut wind_currents = Vec::new();
         let mut landmarks = Vec::new();
+        let mut walkways = Vec::new();
 
         match index {
             0 => {
@@ -165,8 +204,9 @@ impl ChunkWorld {
                 items.push(PickupItem::new(30.0, ground_y, ItemKind::GaleShard));
             }
             3 => {
+                walkways.push(Walkway::new(12.0, CHUNK_WIDTH as f32, 5.0));
                 wind_currents.push(WindCurrent::new(
-                    18.0,
+                    30.0,
                     ground_y,
                     14.0,
                     8.0,
@@ -174,9 +214,10 @@ impl ChunkWorld {
                 ));
                 items.push(PickupItem::new(22.0, ground_y - 5.0, ItemKind::GaleShard));
                 items.push(PickupItem::new(26.0, ground_y - 6.5, ItemKind::GaleShard));
-                items.push(PickupItem::new(30.0, ground_y - 5.0, ItemKind::WindShield));
+                items.push(PickupItem::new(30.0, ground_y - 7.0, ItemKind::WindShield));
             }
             4 => {
+                walkways.push(Walkway::new(0.0, 40.0, 5.0));
                 obstacles.push(Obstacle::new(18.0, ground_y, ObstacleKind::LowBarrier));
                 items.push(PickupItem::new(28.0, ground_y - 1.0, ItemKind::GaleShard));
                 obstacles.push(Obstacle::new(38.0, ground_y, ObstacleKind::LowBarrier));
@@ -365,6 +406,7 @@ impl ChunkWorld {
             items,
             wind_currents,
             landmarks,
+            walkways,
         }
     }
 }

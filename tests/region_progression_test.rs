@@ -122,6 +122,79 @@ fn test_wind_updraft_triggers_gliding() {
 }
 
 #[test]
+fn jumping_onto_the_suspended_span_keeps_the_traveler_on_its_height() {
+    let mut game = RunnerState::new(80, 24, 0x12345678);
+    game.distance = 134.0;
+    game.world.scroll_x = 134.0;
+
+    for frame in 0usize..100 {
+        game.player.invulnerable_timer = 10.0;
+        let input = (frame == 0).then_some(PlayerInput::Jump);
+        game.update(1.0 / 60.0, input);
+    }
+
+    assert_eq!(game.player.y, game.world.ground_y as f32 - 5.0);
+    assert!(matches!(game.player.action, ActionState::Running { .. }));
+    assert_eq!(game.player.shields, 2);
+}
+
+#[test]
+fn lower_track_stays_available_under_the_suspended_span() {
+    let mut game = RunnerState::new(80, 24, 0x12345678);
+    game.distance = 134.0;
+    game.world.scroll_x = 134.0;
+
+    for _ in 0..100 {
+        game.player.invulnerable_timer = 10.0;
+        game.update(1.0 / 60.0, None);
+    }
+
+    assert_eq!(game.player.y, game.world.ground_y as f32);
+    assert!(matches!(game.player.action, ActionState::Running { .. }));
+    assert_eq!(game.player.shields, 1);
+}
+
+#[test]
+fn raised_route_clears_rubble_that_crosses_the_lower_rail() {
+    let mut game = RunnerState::new(80, 24, 0x12345678);
+    game.distance = 190.0;
+    game.world.scroll_x = 190.0;
+    game.player.y = game.world.ground_y as f32 - 5.0;
+    game.player.action = ActionState::Running {
+        cycle_timer: 0.0,
+        frame: 0,
+    };
+
+    for _ in 0..120 {
+        game.update(1.0 / 60.0, None);
+    }
+
+    assert_eq!(game.player.shields, 1);
+    assert!(game.player.y > game.world.ground_y as f32 - 5.0);
+    assert!(game.player.y < game.world.ground_y as f32);
+}
+
+#[test]
+fn leaving_the_suspended_span_returns_the_traveler_to_the_lower_track() {
+    let mut game = RunnerState::new(80, 24, 0x12345678);
+    game.distance = 215.0;
+    game.world.scroll_x = 215.0;
+    game.player.y = game.world.ground_y as f32 - 5.0;
+    game.player.action = ActionState::Running {
+        cycle_timer: 0.0,
+        frame: 0,
+    };
+
+    for _ in 0..18 {
+        game.update(1.0 / 60.0, None);
+    }
+
+    assert!(game.player.y > game.world.ground_y as f32 - 5.0);
+    assert!(game.player.y < game.world.ground_y as f32);
+    assert!(matches!(game.player.action, ActionState::Jumping { .. }));
+}
+
+#[test]
 fn test_line_restoration_visual_sequence() {
     let mut game = RunnerState::new(120, 30, 0x12345678);
 
@@ -166,6 +239,7 @@ fn state_with_nearby_landmark(kind: LandmarkKind) -> RunnerState {
         items: Vec::new(),
         wind_currents: Vec::new(),
         landmarks: vec![Landmark::new(landmark_x, ground_y, kind)],
+        walkways: Vec::new(),
     });
     game
 }

@@ -273,6 +273,10 @@ impl RunnerPlayer {
     }
 
     pub fn update(&mut self, dt: f32, ground_y: f32) {
+        self.update_with_platform(dt, ground_y, None);
+    }
+
+    pub fn update_with_platform(&mut self, dt: f32, ground_y: f32, platform_y: Option<f32>) {
         if self.dash_cooldown_timer > 0.0 {
             self.dash_cooldown_timer = (self.dash_cooldown_timer - dt).max(0.0);
         }
@@ -284,12 +288,31 @@ impl RunnerPlayer {
         }
         self.input_buffer.update(dt);
 
+        let platform_support = platform_y.filter(|surface_y| (self.y - *surface_y).abs() < 0.05);
+        if !self.is_on_ground(ground_y)
+            && platform_support.is_none()
+            && matches!(
+                self.action,
+                ActionState::Running { .. } | ActionState::Sliding { .. }
+            )
+        {
+            if matches!(self.action, ActionState::Running { .. }) {
+                self.start_falling_off_ledge();
+            } else {
+                self.action = ActionState::Jumping {
+                    phase: JumpPhase::Descent,
+                    vertical_velocity: 0.0,
+                    elapsed_secs: 0.0,
+                };
+            }
+        }
+
         match self.action {
             ActionState::Idle {
                 ref mut cycle_timer,
                 ref mut frame,
             } => {
-                self.y = ground_y;
+                self.y = platform_support.unwrap_or(ground_y);
                 *cycle_timer += dt;
                 if *cycle_timer >= 0.25 {
                     *cycle_timer = 0.0;
@@ -300,7 +323,7 @@ impl RunnerPlayer {
                 ref mut cycle_timer,
                 ref mut frame,
             } => {
-                self.y = ground_y;
+                self.y = platform_support.unwrap_or(ground_y);
                 *cycle_timer += dt;
                 if *cycle_timer >= 0.12 {
                     *cycle_timer = 0.0;
@@ -312,6 +335,7 @@ impl RunnerPlayer {
                 ref mut vertical_velocity,
                 ref mut elapsed_secs,
             } => {
+                let previous_y = self.y;
                 *elapsed_secs += dt;
 
                 let gravity = if vertical_velocity.abs() < APEX_VELOCITY_THRESHOLD {
@@ -328,11 +352,14 @@ impl RunnerPlayer {
                 *vertical_velocity = (*vertical_velocity + gravity * dt).min(MAX_FALL_SPEED);
                 self.y += *vertical_velocity * dt;
 
-                if self.y >= ground_y {
-                    self.y = ground_y;
+                let landing_y = platform_y
+                    .filter(|surface_y| previous_y <= *surface_y && self.y >= *surface_y)
+                    .or_else(|| (self.y >= ground_y).then_some(ground_y));
+                if let Some(landing_y) = landing_y {
+                    self.y = landing_y;
 
                     if let Some(buffered) = self.input_buffer.pop() {
-                        self.handle_input(buffered, ground_y);
+                        self.handle_input(buffered, landing_y);
                     } else {
                         self.action = ActionState::Running {
                             cycle_timer: 0.0,
@@ -345,14 +372,18 @@ impl RunnerPlayer {
                 ref mut elapsed_secs,
                 ref mut vertical_velocity,
             } => {
+                let previous_y = self.y;
                 *elapsed_secs += dt;
                 *vertical_velocity = (*vertical_velocity + 10.0 * dt).min(6.0);
                 self.y += *vertical_velocity * dt;
 
-                if self.y >= ground_y {
-                    self.y = ground_y;
+                let landing_y = platform_y
+                    .filter(|surface_y| previous_y <= *surface_y && self.y >= *surface_y)
+                    .or_else(|| (self.y >= ground_y).then_some(ground_y));
+                if let Some(landing_y) = landing_y {
+                    self.y = landing_y;
                     if let Some(buffered) = self.input_buffer.pop() {
-                        self.handle_input(buffered, ground_y);
+                        self.handle_input(buffered, landing_y);
                     } else {
                         self.action = ActionState::Running {
                             cycle_timer: 0.0,
@@ -364,7 +395,7 @@ impl RunnerPlayer {
             ActionState::Sliding {
                 ref mut remaining_secs,
             } => {
-                self.y = ground_y;
+                self.y = platform_support.unwrap_or(ground_y);
                 *remaining_secs -= dt;
                 if *remaining_secs <= 0.0 {
                     if let Some(buffered) = self.input_buffer.pop() {
@@ -382,7 +413,7 @@ impl RunnerPlayer {
             } => {
                 *remaining_secs -= dt;
                 if *remaining_secs <= 0.0 {
-                    if self.is_on_ground(ground_y) {
+                    if self.is_on_ground(ground_y) || platform_support.is_some() {
                         self.action = ActionState::Running {
                             cycle_timer: 0.0,
                             frame: 0,
