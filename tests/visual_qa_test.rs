@@ -25,6 +25,18 @@ fn buffer_to_string(buf: &Buffer) -> String {
     out
 }
 
+fn white_silhouette_rows(frame: &Buffer, ground_y: u16) -> usize {
+    (ground_y.saturating_sub(14)..ground_y)
+        .filter(|&y| {
+            (0..frame.width()).any(|x| {
+                frame.get(x, y).is_some_and(|cell| {
+                    cell.ch != ' ' && cell.fg == galerne::terminal::buffer::Color::White
+                })
+            })
+        })
+        .count()
+}
+
 #[test]
 fn restored_line_resumes_the_suspended_tram() {
     let mut dormant = Buffer::new(236, 53);
@@ -139,6 +151,72 @@ fn restoring_the_canal_gate_changes_the_hanging_garden_in_the_world_frame() {
         })
         .expect("restored canal should render a cyan water channel");
     assert_ne!(dry_frame.get(stream_cell.0, stream_cell.1).unwrap().ch, '>');
+}
+
+#[test]
+fn large_terminal_uses_a_taller_authored_traveler_than_the_compact_view() {
+    let mut compact = RunnerState::new(80, 24, 0x12345678);
+    let mut large = RunnerState::new(236, 53, 0x12345678);
+    compact.world.chunks.clear();
+    large.world.chunks.clear();
+
+    let mut compact_frame = Buffer::new(80, 24);
+    let mut large_frame = Buffer::new(236, 53);
+    compact.render(&mut compact_frame, Locale::En);
+    large.render(&mut large_frame, Locale::En);
+
+    let compact_rows = white_silhouette_rows(&compact_frame, compact.world.ground_y as u16);
+    let large_rows = white_silhouette_rows(&large_frame, large.world.ground_y as u16);
+
+    println!(
+        "--- VISUAL QA: ROOMY TERMINAL TRAVELER (236x53) ---\n{}",
+        buffer_to_string(&large_frame)
+    );
+    assert!(compact_rows <= 8);
+    assert!(
+        large_rows >= 9,
+        "large silhouette only spans {large_rows} rows"
+    );
+    assert!(large_rows > compact_rows);
+}
+
+#[test]
+fn roomy_terminal_traveler_keeps_full_scale_through_air_actions() {
+    for action in [
+        ActionState::Jumping {
+            phase: galerne::game::runner::action::JumpPhase::Ascent,
+            vertical_velocity: -1.0,
+            elapsed_secs: 0.0,
+        },
+        ActionState::Jumping {
+            phase: galerne::game::runner::action::JumpPhase::Apex,
+            vertical_velocity: 0.0,
+            elapsed_secs: 0.0,
+        },
+        ActionState::Jumping {
+            phase: galerne::game::runner::action::JumpPhase::Descent,
+            vertical_velocity: 1.0,
+            elapsed_secs: 0.0,
+        },
+        ActionState::Gliding {
+            elapsed_secs: 0.0,
+            vertical_velocity: 0.0,
+        },
+        ActionState::Dashing {
+            remaining_secs: 0.1,
+        },
+    ] {
+        let mut game = RunnerState::new(236, 53, 0x12345678);
+        game.world.chunks.clear();
+        game.player.action = action;
+        let mut frame = Buffer::new(236, 53);
+        game.render(&mut frame, Locale::En);
+
+        assert!(
+            white_silhouette_rows(&frame, game.world.ground_y as u16) >= 9,
+            "traveler lost its large silhouette during {action:?}"
+        );
+    }
 }
 
 #[test]

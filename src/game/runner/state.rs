@@ -6,7 +6,7 @@ use unicode_width::UnicodeWidthStr;
 
 use super::action::{ActionState, PlayerInput};
 use super::items::{FloatingIndicator, ItemKind};
-use super::player::{RunnerPlayer, PLAYER_SPRITE_LEFT_OFFSET, PLAYER_WIDTH};
+use super::player::{RunnerPlayer, PLAYER_WIDTH};
 use super::region::{sector_for_distance, SectorKind};
 use super::wind::{TailwindTier, WindKind};
 use super::world::{Chunk, ChunkWorld, LandmarkKind, Walkway, CHECKPOINTS, CHUNK_WIDTH};
@@ -876,9 +876,10 @@ impl RunnerState {
             }
         }
 
-        let player_sprite = self.player.current_sprite();
+        let (player_sprite, sprite_left_offset) =
+            self.player.current_sprite_for_terminal(width, height);
         let base_y = self.player.y.round() as i32;
-        let sprite_x = self.player.x.round() as i32 - PLAYER_SPRITE_LEFT_OFFSET as i32;
+        let sprite_x = self.player.x.round() as i32 - sprite_left_offset as i32;
         let body_color = if self.player.invulnerable_timer > 0.0 {
             Color::Cyan
         } else {

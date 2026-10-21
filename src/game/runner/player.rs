@@ -9,6 +9,7 @@ pub const PLAYER_HEIGHT: usize = 4;
 pub const SLIDE_WIDTH: usize = 10;
 pub const SLIDE_HEIGHT: usize = 2;
 pub const PLAYER_SPRITE_LEFT_OFFSET: usize = 6;
+const LARGE_SPRITE_LEFT_OFFSET: usize = 12;
 
 pub const JUMP_INITIAL_VELOCITY: f32 = -23.0;
 pub const GRAVITY_NORMAL: f32 = 50.0;
@@ -142,6 +143,180 @@ const RESPAWNING: &[&str] = &[
     "         /   |  \\",
     "        /___/ \\___\\",
     "       /___/    \\___\\",
+];
+
+const RUN_LARGE_0: &[&str] = &[
+    r"                         _/\_",
+    r"                      .-'    '-.",
+    r"                     /  .----.  \",
+    r"                    |  | o>  |  |",
+    r"                     \__'----'__/",
+    r"~~~~~~~\_____[#]-----/|________/",
+    r" ~~~~~~~\___________/ |    /",
+    r"                       |   /|",
+    r"                      /|  / |",
+    r"                     / | /  |",
+    r"                    /__|/   /\",
+    r"                   /___/   /__\",
+];
+
+const RUN_LARGE_1: &[&str] = &[
+    r"                         _/\_",
+    r"                      .-'    '-.",
+    r"                     /  .----.  \",
+    r"                    |  | o>  |  |",
+    r"                     \__'----'__/",
+    r" ~~~~~~~\_____[#]-----/|________/",
+    r"~~~~~~~~\___________/ |    /",
+    r"                       |  /|",
+    r"                      /| / |",
+    r"                     / |/  |",
+    r"                    /__|  / \\",
+    r"                   /___/ /___\\",
+];
+
+const JUMP_LARGE_ASCENT: &[&str] = &[
+    r"                         _/\_",
+    r"                      .-'    '-.",
+    r"                     /  .----.  \",
+    r"                    |  | o>  |  |",
+    r"                     \__'----'__/",
+    r"   ~~~~~~~\_____[#]---/|________/",
+    r"~~~~~~~~~~\_________/ |",
+    r"                        |\",
+    r"                       /| \__",
+    r"                      / |    \__",
+    r"                     /__|      _/",
+    r"                    /___/    _/",
+];
+
+const JUMP_LARGE_APEX: &[&str] = &[
+    r"                         _/\_",
+    r"                      .-'    '-.",
+    r"                     /  .----.  \",
+    r"                    |  | o>  |  |",
+    r"                     \__'----'__/",
+    r"~~~~~~~~~~\_____[#]-----/|______\",
+    r" ~~~~~~~~\____________/ |     /",
+    r"                        |    /",
+    r"                       /|   /",
+    r"                    __/ |  /",
+    r"                   /___/ \/",
+    r"                    \____/",
+];
+
+const JUMP_LARGE_DESCENT: &[&str] = &[
+    r"                         _/\_",
+    r"                      .-'    '-.",
+    r"                     /  .----.  \",
+    r"                    |  | o>  |  |",
+    r"                     \__'----'__/",
+    r"~~~~~~~\_____[#]------/|________/",
+    r" ~~~~~~~\____________/ |",
+    r"                       |  \__",
+    r"                      /|     \__",
+    r"                     / |       _/",
+    r"                    /__|    __/",
+    r"                   /___/___/",
+];
+
+const JUMP_LARGE_LANDING: &[&str] = &[
+    r"                         _/\_",
+    r"                      .-'    '-.",
+    r"                     /  .----.  \",
+    r"                    |  | o>  |  |",
+    r"                     \__'----'__/",
+    r"  ~~~~~~~~\_____[#]---/|________/",
+    r" ~~~~~~~~~\__________/ |   _/",
+    r"                       |  /",
+    r"                      /| /",
+    r"                     / |/",
+    r"                    /__|___",
+    r"                   /_______\\",
+];
+
+const GLIDING_LARGE: &[&str] = &[
+    r"                         _/\_",
+    r"                      .-'    '-.",
+    r"                     /  .----.  \",
+    r"                    |  | o>  |  |",
+    r"                     \__'----'__/",
+    r"~~~~~~~~~~~~~~~~\_____[#]------/|_____",
+    r" ~~~~~~~~~~~~~~~~\____________/ |     \__",
+    r"                              /  |        \__",
+    r"                             /  /|           \",
+    r"                            /__/ |            \",
+    r"                                / \___________/",
+    r"                               /_____________/",
+];
+
+const SLIDING_LARGE: &[&str] = &[
+    r"                       _/\_",
+    r"                    .-'    '-.",
+    r"                   /  .----.  \",
+    r"~~~~~~~~~~~~~~~~\_[#]| o> |____/",
+    r" ~~~~~~~~~~~~~~~~\___\____/____|___",
+    r"                      \_________/___/",
+];
+
+const DASHING_LARGE: &[&str] = &[
+    r"                         _/\_",
+    r"                      .-'    '-.",
+    r"                     /  .----.  \",
+    r"                    |  | o>  |  |",
+    r"                     \__'----'__/",
+    r">>>>>~~~~~~~\_____[#]---/|______\\",
+    r">>>>> ~~~~~~~\_________/ |     /",
+    r"                         /|    /",
+    r"                        / |   /",
+    r"                       /__|__/",
+    r"                      /___/",
+    r"                     /____/",
+];
+
+const HIT_LARGE: &[&str] = &[
+    r"                         _/\_",
+    r"                      .-'    '-.",
+    r"                     /  .----.  \",
+    r"                    |  | x>  |  |",
+    r"                     \__'----'__/",
+    r" ~~~~~~~\_____[#]-----/|________/",
+    r"~~~~~~~~\___________/ |    /",
+    r"                       |   /|",
+    r"                      /|  / |",
+    r"                     / | /  |",
+    r"                    /__|/   /\",
+    r"                   /___/   /__\\",
+];
+
+const ACTIVATING_LARGE: &[&str] = &[
+    r"                         _/\_  *",
+    r"                      .-'    '-.+",
+    r"                     /  .----.  \",
+    r"                    |  | o>  |  |",
+    r"                     \__'----'__/",
+    r"~~~~~~~\_____[#]-----/|________/",
+    r" ~~~~~~~\___________/ |    /",
+    r"                       |   /|___*",
+    r"                      /|  / |  +",
+    r"                     / | /  |",
+    r"                    /__|/   /\",
+    r"                   /___/   /__\\",
+];
+
+const RESPAWNING_LARGE: &[&str] = &[
+    r"                         _/\_",
+    r"                      .-'    '-.",
+    r"                     /  .----.  \",
+    r"                    |  | o>  |  |",
+    r"                     \__'----'__/",
+    r" . .~~~\_____[#]-----/|________/",
+    r" ~~~~~~~\___________/ |    /",
+    r"                       |   /|",
+    r"                      /|  / |",
+    r"                     / | /  |",
+    r"                    /__|/   /\",
+    r"                   /___/   /__\\",
 ];
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -488,5 +663,42 @@ impl RunnerPlayer {
             ActionState::Activating { .. } => ACTIVATING,
             ActionState::Respawning { .. } => RESPAWNING,
         }
+    }
+
+    pub fn current_sprite_for_terminal(
+        &self,
+        width: usize,
+        height: usize,
+    ) -> (&'static [&'static str], usize) {
+        if width < 120 || height < 30 {
+            return (self.current_sprite(), PLAYER_SPRITE_LEFT_OFFSET);
+        }
+
+        let sprite = match self.action {
+            ActionState::Idle { frame, .. } => {
+                if frame == 0 {
+                    RUN_LARGE_0
+                } else {
+                    RUN_LARGE_1
+                }
+            }
+            ActionState::Running { frame, .. } => match frame % 2 {
+                0 => RUN_LARGE_0,
+                _ => RUN_LARGE_1,
+            },
+            ActionState::Jumping { phase, .. } => match phase {
+                JumpPhase::Ascent => JUMP_LARGE_ASCENT,
+                JumpPhase::Apex => JUMP_LARGE_APEX,
+                JumpPhase::Descent => JUMP_LARGE_DESCENT,
+                JumpPhase::Landing => JUMP_LARGE_LANDING,
+            },
+            ActionState::Gliding { .. } => GLIDING_LARGE,
+            ActionState::Sliding { .. } => SLIDING_LARGE,
+            ActionState::Dashing { .. } => DASHING_LARGE,
+            ActionState::Hit { .. } => HIT_LARGE,
+            ActionState::Activating { .. } => ACTIVATING_LARGE,
+            ActionState::Respawning { .. } => RESPAWNING_LARGE,
+        };
+        (sprite, LARGE_SPRITE_LEFT_OFFSET)
     }
 }
