@@ -172,22 +172,24 @@ fn main() {
             }
         }
         CliAction::Enable => {
+            let locale = Locale::detect();
             let mut state = load_save_state(&save_manager);
             state.settings.auto_activate = true;
             if let Err(e) = save_manager.save(&state) {
                 eprintln!("Failed to update settings: {}", e);
                 process::exit(1);
             }
-            println!("✓ Automatic wait-time activation enabled.");
+            println!("✓ {}", t("cli_auto_enabled", locale));
         }
         CliAction::Disable => {
+            let locale = Locale::detect();
             let mut state = load_save_state(&save_manager);
             state.settings.auto_activate = false;
             if let Err(e) = save_manager.save(&state) {
                 eprintln!("Failed to update settings: {}", e);
                 process::exit(1);
             }
-            println!("✓ Automatic wait-time activation disabled (progression preserved).");
+            println!("✓ {}", t("cli_auto_disabled", locale));
         }
         CliAction::Uninstall => {
             if let Err(e) = uninstall_all_shells(false) {

@@ -282,6 +282,8 @@ pub const ALL_KEYS: &[&str] = &[
     "cli_setup",
     "cli_enable",
     "cli_disable",
+    "cli_auto_enabled",
+    "cli_auto_disabled",
     "cli_uninstall",
     "cli_update",
     "cli_update_check",
@@ -521,6 +523,8 @@ fn translate_en(key: &'static str) -> &'static str {
         "cli_setup" => "Configure shell integration (Bash, Zsh, PowerShell)",
         "cli_enable" => "Enable automatic wait-time game activation",
         "cli_disable" => "Disable automatic game activation",
+        "cli_auto_enabled" => "Automatic wait-time activation enabled.",
+        "cli_auto_disabled" => "Automatic wait-time activation disabled (progression preserved).",
         "cli_uninstall" => "Remove shell hooks and application state",
         "cli_update" => "Check for and safely install the latest release",
         "cli_update_check" => "Check release availability without installing",
@@ -742,6 +746,10 @@ fn translate_fr(key: &str) -> Option<&'static str> {
         "cli_setup" => "Configurer l'intégration du shell (Bash, Zsh, PowerShell)",
         "cli_enable" => "Activer l'ouverture automatique pendant les attentes",
         "cli_disable" => "Désactiver l'ouverture automatique du jeu",
+        "cli_auto_enabled" => "L'activation automatique pendant les attentes est activée.",
+        "cli_auto_disabled" => {
+            "L'activation automatique est désactivée ; la progression est conservée."
+        }
         "cli_uninstall" => "Supprimer les hooks du shell et les données de l'application",
         "cli_update" => "Rechercher et installer la dernière version",
         "cli_update_check" => "Rechercher les mises à jour sans modifier l'installation",
@@ -961,6 +969,10 @@ fn translate_es(key: &str) -> Option<&'static str> {
         "cli_setup" => "Configurar integración del shell (Bash, Zsh, PowerShell)",
         "cli_enable" => "Activar el inicio automático durante las esperas",
         "cli_disable" => "Desactivar el inicio automático del juego",
+        "cli_auto_enabled" => "La activación automática durante las esperas está activada.",
+        "cli_auto_disabled" => {
+            "La activación automática está desactivada; el progreso se conserva."
+        }
         "cli_uninstall" => "Eliminar hooks del shell y los datos de la aplicación",
         "cli_update" => "Buscar e instalar la última versión",
         "cli_update_check" => "Buscar actualizaciones sin modificar la instalación",
@@ -1170,6 +1182,8 @@ fn translate_zh(key: &str) -> Option<&'static str> {
         "cli_setup" => "配置 shell 集成（Bash、Zsh、PowerShell）",
         "cli_enable" => "等待期间自动开启游戏",
         "cli_disable" => "关闭自动开启游戏",
+        "cli_auto_enabled" => "等待期间自动开启已启用。",
+        "cli_auto_disabled" => "自动开启已关闭，旅途进度已保留。",
         "cli_uninstall" => "移除 shell 钩子和应用数据",
         "cli_update" => "检查并安装最新版本",
         "cli_update_check" => "检查更新但不修改安装",

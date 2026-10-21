@@ -406,6 +406,82 @@ fn reset_without_a_previous_save_does_not_claim_to_archive_one() {
     );
 }
 
+#[test]
+fn activation_commands_are_localized_and_preserve_progression() {
+    for (locale, enabled_text, disabled_text) in [
+        (
+            "en",
+            "Automatic wait-time activation enabled.",
+            "Automatic wait-time activation disabled (progression preserved).",
+        ),
+        (
+            "fr",
+            "L'activation automatique pendant les attentes est activée.",
+            "L'activation automatique est désactivée ; la progression est conservée.",
+        ),
+        (
+            "es",
+            "La activación automática durante las esperas está activada.",
+            "La activación automática está desactivada; el progreso se conserva.",
+        ),
+        (
+            "zh-CN",
+            "等待期间自动开启已启用。",
+            "自动开启已关闭，旅途进度已保留。",
+        ),
+    ] {
+        let data_dir = unique_data_dir("galerne-activation-cli");
+        let saves = SaveManager::with_dir(&data_dir);
+        let mut state = SaveState {
+            currency_shards: 17,
+            total_play_time_secs: 312,
+            ..Default::default()
+        };
+        state.settings.auto_activate = false;
+        saves.save(&state).expect("test save should be created");
+
+        let enabled = Command::new(env!("CARGO_BIN_EXE_galerne"))
+            .arg("enable")
+            .env("GALERNE_LANG", locale)
+            .env("GALERNE_DATA_DIR", &data_dir)
+            .output()
+            .expect("Galerne enable should run");
+        let enabled_stdout =
+            String::from_utf8(enabled.stdout).expect("command output should be UTF-8");
+        let after_enable = saves
+            .load_or_default()
+            .expect("save should load after enabling");
+
+        let disabled = Command::new(env!("CARGO_BIN_EXE_galerne"))
+            .arg("disable")
+            .env("GALERNE_LANG", locale)
+            .env("GALERNE_DATA_DIR", &data_dir)
+            .output()
+            .expect("Galerne disable should run");
+        let disabled_stdout =
+            String::from_utf8(disabled.stdout).expect("command output should be UTF-8");
+        let after_disable = saves
+            .load_or_default()
+            .expect("save should load after disabling");
+        let cleanup_result = std::fs::remove_dir_all(&data_dir);
+
+        assert!(enabled.status.success());
+        assert!(disabled.status.success());
+        assert!(enabled_stdout.contains(enabled_text), "{enabled_stdout}");
+        assert!(disabled_stdout.contains(disabled_text), "{disabled_stdout}");
+        assert!(after_enable.settings.auto_activate);
+        assert!(!after_disable.settings.auto_activate);
+        for saved in [after_enable, after_disable] {
+            assert_eq!(saved.currency_shards, 17);
+            assert_eq!(saved.total_play_time_secs, 312);
+        }
+        assert!(
+            cleanup_result.is_ok(),
+            "test data directory should be removed"
+        );
+    }
+}
+
 fn unique_data_dir(prefix: &str) -> std::path::PathBuf {
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
