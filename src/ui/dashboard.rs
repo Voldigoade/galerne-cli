@@ -1171,14 +1171,8 @@ fn sync_game_to_save_state(
         }
     }
     save_state.unlock_workbench_from_inventory();
-    for cp_id in &game.unlocked_checkpoints {
-        if !save_state
-            .world_progress
-            .checkpoints_unlocked
-            .contains(cp_id)
-        {
-            save_state.world_progress.checkpoints_unlocked.push(*cp_id);
-        }
+    for &cp_id in &game.unlocked_checkpoints {
+        save_state.world_progress.record_checkpoint(cp_id);
     }
 }
 

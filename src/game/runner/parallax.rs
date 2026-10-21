@@ -384,6 +384,14 @@ impl ParallaxEngine {
         self.fg_offset += world_dx * 1.35;
     }
 
+    pub fn set_world_position(&mut self, world_x: f32) {
+        self.sky_offset = world_x * 0.06;
+        self.far_offset = world_x * 0.18;
+        self.mid_offset = world_x * 0.45;
+        self.ground_offset = world_x;
+        self.fg_offset = world_x * 1.35;
+    }
+
     pub fn render_backdrop(
         &self,
         buf: &mut Buffer,

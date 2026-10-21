@@ -624,6 +624,37 @@ fn next_checkpoint_advances_when_the_current_one_is_reached() {
 }
 
 #[test]
+fn track_shelter_destination_and_art_read_at_both_terminal_sizes() {
+    for (width, height) in [(80, 24), (236, 53)] {
+        let mut game = RunnerState::new(width, height, 0x12345678);
+        game.distance = 1760.0;
+        game.world.scroll_x = 1760.0;
+        game.world.parallax.update(1760.0);
+        game.last_checkpoint_id = 5;
+        game.last_checkpoint_distance = 1570.0;
+        game.unlocked_checkpoints.extend(1..=5);
+        game.world.ensure_chunks_generated(1830.0);
+
+        let mut frame = Buffer::new(width as u16, height as u16);
+        game.render(&mut frame, Locale::En);
+        let rendered = buffer_to_string(&frame);
+        let shelter_top_x = 61;
+        let shelter_top_y = (game.world.ground_y - 3) as u16;
+
+        println!("--- VISUAL QA: TRACK SHELTER AT {width}x{height} ---\n{rendered}");
+        assert_eq!(frame.get(shelter_top_x, shelter_top_y).unwrap().ch, '.');
+        assert!(rendered.contains("Track shelter"));
+
+        for &locale in ALL_LOCALES {
+            let mut localized = Buffer::new(width as u16, height as u16);
+            game.render(&mut localized, locale);
+            let rendered = buffer_to_string(&localized);
+            assert!(rendered.contains(t("cp_track_shelter", locale)));
+        }
+    }
+}
+
+#[test]
 fn first_region_renders_a_raised_walkway_above_the_lower_track() {
     let mut game = RunnerState::new(236, 53, 0x12345678);
     game.distance = 160.0;
@@ -673,7 +704,7 @@ fn checkpoint_landmarks_match_the_waypoint_positions() {
             .landmarks
             .iter()
             .find_map(|landmark| match &landmark.kind {
-                LandmarkKind::CheckpointPylon {
+                LandmarkKind::Checkpoint {
                     id: landmark_id,
                     name_key: landmark_name,
                 } if *landmark_id == id && landmark_name == name_key => Some(landmark.rel_x),

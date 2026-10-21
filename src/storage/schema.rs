@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::game::runner::world::CHECKPOINTS;
 pub use crate::game::runner::RunnerSnapshot;
 use crate::ui::i18n::Locale;
 
@@ -95,6 +96,19 @@ impl Default for WorldProgress {
             secret_cache_found: false,
             high_truss_explored: false,
             canal_gate_opened: false,
+        }
+    }
+}
+
+impl WorldProgress {
+    pub fn record_checkpoint(&mut self, checkpoint_id: u32) {
+        let authored_count = CHECKPOINTS.len() as u32;
+        if checkpoint_id >= authored_count {
+            self.checkpoints_unlocked
+                .retain(|unlocked_id| *unlocked_id < authored_count);
+        }
+        if !self.checkpoints_unlocked.contains(&checkpoint_id) {
+            self.checkpoints_unlocked.push(checkpoint_id);
         }
     }
 }

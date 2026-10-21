@@ -4,7 +4,11 @@ use galerne::game::runner::obstacles::{Obstacle, ObstacleKind};
 use galerne::game::runner::player::PLAYER_WIDTH;
 use galerne::game::runner::region::{sector_for_distance, SectorKind};
 use galerne::game::runner::state::RunnerState;
-use galerne::game::runner::world::{Chunk, ChunkWorld, Landmark, LandmarkKind, Walkway};
+use galerne::game::runner::world::{
+    Chunk, ChunkWorld, Landmark, LandmarkKind, Walkway, FIRST_REPEATING_CHECKPOINT_X,
+    REPEATING_CHECKPOINT_SPACING,
+};
+use galerne::storage::schema::WorldProgress;
 use galerne::terminal::buffer::Buffer;
 use galerne::ui::i18n::Locale;
 
@@ -96,6 +100,132 @@ fn test_safe_checkpoint_respawn_preserves_inventory_and_progress() {
         game.update(0.033, None);
     }
     assert!(game.distance > checkpoint_dist);
+}
+
+#[test]
+fn checkpoint_terrain_remains_available_after_forward_travel_and_respawn() {
+    let mut game = RunnerState::new(80, 24, 0x12345678);
+
+    for _ in 0..1000 {
+        game.player.invulnerable_timer = 10.0;
+        game.update(0.033, None);
+        if game.last_checkpoint_id == 1 {
+            break;
+        }
+    }
+
+    assert_eq!(game.last_checkpoint_id, 1);
+    let checkpoint_distance = game.last_checkpoint_distance;
+    let checkpoint_chunk = 260 / 50;
+
+    let target_distance = checkpoint_distance + 100.0;
+    for _ in 0..1000 {
+        game.player.invulnerable_timer = 10.0;
+        game.update(0.033, None);
+        if game.distance >= target_distance {
+            break;
+        }
+    }
+
+    game.player.shields = 0;
+    game.player.invulnerable_timer = 0.0;
+    game.handle_player_collision();
+
+    assert_eq!(game.distance, checkpoint_distance);
+    assert!((game.world.parallax.far_offset - game.world.scroll_x * 0.18).abs() < 0.1);
+    assert!((game.world.parallax.mid_offset - game.world.scroll_x * 0.45).abs() < 0.1);
+    assert!(
+        game.world
+            .active_chunks()
+            .iter()
+            .any(|chunk| chunk.index == checkpoint_chunk),
+        "respawn must retain the authored terrain around the active checkpoint"
+    );
+}
+
+#[test]
+fn a_track_shelter_becomes_a_checkpoint_after_the_first_region() {
+    let mut game = RunnerState::new(80, 24, 0x12345678);
+    game.last_checkpoint_id = 5;
+    game.last_checkpoint_distance = 1570.0;
+    game.unlocked_checkpoints.extend(1..=5);
+    game.distance = 1790.0;
+    game.world.scroll_x = game.distance;
+    game.world.ensure_chunks_generated(1900.0);
+
+    for _ in 0..500 {
+        game.player.invulnerable_timer = 10.0;
+        game.update(0.033, None);
+        if game.last_checkpoint_id == 6 {
+            break;
+        }
+    }
+
+    assert_eq!(game.last_checkpoint_id, 6);
+    assert!(game.unlocked_checkpoints.contains(&6));
+    assert!(
+        (game.last_checkpoint_distance + game.player.x - 1820.0).abs() <= 7.0,
+        "checkpoint should activate when the traveler reaches the shelter"
+    );
+}
+
+#[test]
+fn repeated_shelters_advance_the_checkpoint_without_growing_saved_progress() {
+    let mut game = RunnerState::new(80, 24, 0x12345678);
+    game.last_checkpoint_id = 5;
+    game.last_checkpoint_distance = 1570.0;
+    game.unlocked_checkpoints.extend(1..=5);
+    game.distance = 1790.0;
+    game.world.scroll_x = game.distance;
+    game.world.ensure_chunks_generated(2200.0);
+
+    for _ in 0..1000 {
+        game.player.invulnerable_timer = 10.0;
+        game.update(0.033, None);
+        if game.last_checkpoint_id == 7 {
+            break;
+        }
+    }
+
+    assert_eq!(game.last_checkpoint_id, 7);
+    assert!(!game.unlocked_checkpoints.contains(&6));
+    assert!(game.unlocked_checkpoints.contains(&7));
+    assert_eq!(game.unlocked_checkpoints.len(), 7);
+
+    let checkpoint_distance = game.last_checkpoint_distance;
+    let checkpoint_world_x = FIRST_REPEATING_CHECKPOINT_X + REPEATING_CHECKPOINT_SPACING;
+    let checkpoint_chunk = checkpoint_world_x / 50;
+    for _ in 0..500 {
+        game.player.invulnerable_timer = 10.0;
+        game.update(0.033, None);
+        if game.distance >= checkpoint_distance + 100.0 {
+            break;
+        }
+    }
+    game.player.shields = 0;
+    game.player.invulnerable_timer = 0.0;
+    game.handle_player_collision();
+    assert_eq!(game.distance, checkpoint_distance);
+    assert!(game.world.active_chunks().iter().any(|chunk| {
+        chunk.index == checkpoint_chunk
+            && chunk
+                .landmarks
+                .iter()
+                .any(|landmark| matches!(&landmark.kind, LandmarkKind::Checkpoint { id: 7, .. }))
+    }));
+
+    let snapshot = game.create_snapshot();
+    let mut resumed = RunnerState::new(80, 24, 0);
+    resumed.resume_snapshot(&snapshot);
+    assert_eq!(resumed.unlocked_checkpoints, [0, 1, 2, 3, 4, 5, 7]);
+
+    let mut progress = WorldProgress::default();
+    for &checkpoint_id in &game.unlocked_checkpoints {
+        progress.record_checkpoint(checkpoint_id);
+    }
+    assert_eq!(progress.checkpoints_unlocked.len(), 7);
+    assert!(progress.checkpoints_unlocked.contains(&7));
+    assert!(!progress.checkpoints_unlocked.contains(&6));
 }
 
 #[test]

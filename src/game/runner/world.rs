@@ -16,10 +16,12 @@ pub const CHECKPOINTS: [(u32, usize, &str); 6] = [
     (4, 1210, "cp_relay_node"),
     (5, 1570, "cp_canal_gardens"),
 ];
+pub const FIRST_REPEATING_CHECKPOINT_X: usize = 1820;
+pub const REPEATING_CHECKPOINT_SPACING: usize = 300;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum LandmarkKind {
-    CheckpointPylon { id: u32, name_key: String },
+    Checkpoint { id: u32, name_key: String },
     CompanionKael { spoken: bool },
     SecretCache { opened: bool },
     RelayNodeConsole { restored: bool },
@@ -40,7 +42,10 @@ impl Landmark {
 
     pub fn sprite(&self) -> &'static [&'static str] {
         match &self.kind {
-            LandmarkKind::CheckpointPylon { .. } => &[" [+] ", "/===\\", "| # |", "|---|"],
+            LandmarkKind::Checkpoint { name_key, .. } if name_key == "cp_track_shelter" => {
+                &[" .------. ", "/| [] |\\", "||    ||", "|______|"]
+            }
+            LandmarkKind::Checkpoint { .. } => &[" [+] ", "/===\\", "| # |", "|---|"],
             LandmarkKind::CompanionKael { .. } => &[" ,(^)  ", "<{#}>~ ", "==[#]==="],
             LandmarkKind::SecretCache { opened: false } => &["  .---.  ", "=[*###*]="],
             LandmarkKind::SecretCache { opened: true } => {
@@ -69,7 +74,7 @@ impl Landmark {
     pub fn bounding_box(&self, chunk_start_x: f32) -> (f32, f32, f32, f32) {
         let abs_x = chunk_start_x + self.rel_x;
         let w = match &self.kind {
-            LandmarkKind::CheckpointPylon { .. } => 5.0,
+            LandmarkKind::Checkpoint { .. } => 5.0,
             LandmarkKind::CompanionKael { .. } => 8.0,
             LandmarkKind::SecretCache { .. } => 9.0,
             LandmarkKind::RelayNodeConsole { .. } => 9.0,
@@ -170,14 +175,30 @@ impl ChunkWorld {
         self.ground_y = new_h.saturating_sub(5).max(8);
     }
 
+    pub fn rewind_to(&mut self, world_x: f32) {
+        self.scroll_x = world_x;
+        self.parallax.set_world_position(world_x);
+    }
+
     pub fn update(&mut self, dx: f32) {
+        self.advance_and_prune(dx, None);
+    }
+
+    pub fn update_from_checkpoint(&mut self, dx: f32, checkpoint_x: f32) {
+        // Keep chunk-local pickups and landmark state intact until they are no longer a respawn route.
+        self.advance_and_prune(dx, Some(checkpoint_x));
+    }
+
+    fn advance_and_prune(&mut self, dx: f32, checkpoint_x: Option<f32>) {
         self.scroll_x += dx;
         self.parallax.update(dx);
 
         let lookahead_x = self.scroll_x + (self.viewport_width as f32) + (CHUNK_WIDTH as f32 * 2.0);
         self.ensure_chunks_generated(lookahead_x);
 
-        let prune_cutoff_x = self.scroll_x - 20.0;
+        let prune_cutoff_x = checkpoint_x
+            .map(|checkpoint_x| (self.scroll_x - 20.0).min(checkpoint_x - 20.0))
+            .unwrap_or(self.scroll_x - 20.0);
         self.chunks.retain(|c| {
             let chunk_end_x = ((c.index + 1) * CHUNK_WIDTH) as f32;
             chunk_end_x >= prune_cutoff_x
@@ -426,9 +447,28 @@ impl ChunkWorld {
                 landmarks.push(Landmark::new(
                     (world_x % CHUNK_WIDTH) as f32,
                     ground_y,
-                    LandmarkKind::CheckpointPylon {
+                    LandmarkKind::Checkpoint {
                         id,
                         name_key: name_key.to_owned(),
+                    },
+                ));
+            }
+        }
+
+        let chunk_start_x = index * CHUNK_WIDTH;
+        if chunk_start_x + CHUNK_WIDTH > FIRST_REPEATING_CHECKPOINT_X {
+            let interval_index = chunk_start_x
+                .saturating_sub(FIRST_REPEATING_CHECKPOINT_X)
+                .div_ceil(REPEATING_CHECKPOINT_SPACING);
+            let world_x =
+                FIRST_REPEATING_CHECKPOINT_X + interval_index * REPEATING_CHECKPOINT_SPACING;
+            if world_x < chunk_start_x + CHUNK_WIDTH {
+                landmarks.push(Landmark::new(
+                    (world_x - chunk_start_x) as f32,
+                    ground_y,
+                    LandmarkKind::Checkpoint {
+                        id: (CHECKPOINTS.len() + interval_index) as u32,
+                        name_key: "cp_track_shelter".to_owned(),
                     },
                 ));
             }

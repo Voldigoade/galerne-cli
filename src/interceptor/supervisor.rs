@@ -267,14 +267,8 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
         }
     }
     save_state.unlock_workbench_from_inventory();
-    for cp_id in &game.unlocked_checkpoints {
-        if !save_state
-            .world_progress
-            .checkpoints_unlocked
-            .contains(cp_id)
-        {
-            save_state.world_progress.checkpoints_unlocked.push(*cp_id);
-        }
+    for &cp_id in &game.unlocked_checkpoints {
+        save_state.world_progress.record_checkpoint(cp_id);
     }
 
     save_state.active_run = Some(game.create_snapshot());

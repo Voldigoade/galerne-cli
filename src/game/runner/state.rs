@@ -10,7 +10,10 @@ use super::obstacles::ObstacleKind;
 use super::player::{RunnerPlayer, PLAYER_WIDTH};
 use super::region::{sector_for_distance, SectorKind};
 use super::wind::{TailwindTier, WindKind};
-use super::world::{Chunk, ChunkWorld, LandmarkKind, Walkway, CHECKPOINTS, CHUNK_WIDTH};
+use super::world::{
+    Chunk, ChunkWorld, LandmarkKind, Walkway, CHECKPOINTS, CHUNK_WIDTH,
+    FIRST_REPEATING_CHECKPOINT_X, REPEATING_CHECKPOINT_SPACING,
+};
 use crate::terminal::buffer::{Buffer, Color, Style};
 use crate::ui::i18n::{t, Locale};
 
@@ -199,6 +202,12 @@ impl RunnerState {
         self.last_checkpoint_distance = snap.last_checkpoint_distance;
         self.companion_met = snap.companion_met;
         self.secret_cache_found = snap.secret_cache_found;
+        let authored_checkpoint_count = CHECKPOINTS.len() as u32;
+        self.unlocked_checkpoints =
+            (0..=self.last_checkpoint_id.min(authored_checkpoint_count - 1)).collect();
+        if self.last_checkpoint_id >= authored_checkpoint_count {
+            self.unlocked_checkpoints.push(self.last_checkpoint_id);
+        }
     }
 
     pub fn start_completion_transition(&mut self, success: bool) {
@@ -273,7 +282,7 @@ impl RunnerState {
         let mut nearest: Option<(f32, &str)> = None;
 
         for &(id, world_x, name_key) in &CHECKPOINTS {
-            if self.unlocked_checkpoints.contains(&id) {
+            if id <= self.last_checkpoint_id || self.unlocked_checkpoints.contains(&id) {
                 continue;
             }
 
@@ -283,6 +292,24 @@ impl RunnerState {
             }
             if nearest.is_none_or(|(best_distance, _)| distance < best_distance) {
                 nearest = Some((distance, name_key));
+            }
+        }
+
+        let repeated_index = if player_x <= FIRST_REPEATING_CHECKPOINT_X as f32 {
+            0
+        } else {
+            ((player_x - FIRST_REPEATING_CHECKPOINT_X as f32) / REPEATING_CHECKPOINT_SPACING as f32)
+                .ceil() as usize
+        };
+        let repeated_id = (CHECKPOINTS.len() + repeated_index) as u32;
+        if repeated_id > self.last_checkpoint_id
+            && !self.unlocked_checkpoints.contains(&repeated_id)
+        {
+            let repeated_x =
+                FIRST_REPEATING_CHECKPOINT_X + repeated_index * REPEATING_CHECKPOINT_SPACING;
+            let distance = repeated_x as f32 - player_x;
+            if nearest.is_none_or(|(best_distance, _)| distance < best_distance) {
+                nearest = Some((distance, "cp_track_shelter"));
             }
         }
 
@@ -343,7 +370,8 @@ impl RunnerState {
         let dx = effective_speed * dt;
         self.distance += dx;
         let previous_scroll_x = self.world.scroll_x;
-        self.world.update(dx);
+        self.world
+            .update_from_checkpoint(dx, self.last_checkpoint_distance);
         let player_world_x = self.world.scroll_x + self.player.x + PLAYER_WIDTH as f32 / 2.0;
         let platform_y = self.world.walkway_y_at(player_world_x);
         self.player.update_with_platform(dt, ground_y, platform_y);
@@ -439,14 +467,21 @@ impl RunnerState {
                 let same_level = (self.player.y - lm.y).abs() <= INTERACTION_VERTICAL_RADIUS;
                 let within_range = same_level
                     && match &lm.kind {
-                        LandmarkKind::CheckpointPylon { .. } => distance < INTERACTION_RADIUS,
+                        LandmarkKind::Checkpoint { .. } => distance < INTERACTION_RADIUS,
                         _ => interaction_pressed && distance < INTERACTION_ACCEPT_RADIUS,
                     };
 
                 if within_range {
                     match &mut lm.kind {
-                        LandmarkKind::CheckpointPylon { id, name_key } => {
-                            if !self.unlocked_checkpoints.contains(id) {
+                        LandmarkKind::Checkpoint { id, name_key } => {
+                            if *id > self.last_checkpoint_id
+                                && !self.unlocked_checkpoints.contains(id)
+                            {
+                                if *id >= CHECKPOINTS.len() as u32 {
+                                    self.unlocked_checkpoints.retain(|unlocked_id| {
+                                        *unlocked_id < CHECKPOINTS.len() as u32
+                                    });
+                                }
                                 self.unlocked_checkpoints.push(*id);
                                 self.last_checkpoint_id = *id;
                                 self.last_checkpoint_distance = self.distance;
@@ -710,7 +745,8 @@ impl RunnerState {
             self.player.invulnerable_timer = 2.0;
             self.player.shields = 1;
             self.distance = self.last_checkpoint_distance;
-            self.world.scroll_x = (self.last_checkpoint_distance - self.player.x).max(0.0);
+            self.world
+                .rewind_to((self.last_checkpoint_distance - self.player.x).max(0.0));
             self.player.y = self.world.ground_y as f32;
             self.reset_flow();
             self.floating_indicators.push(FloatingIndicator::new(
@@ -796,7 +832,7 @@ impl RunnerState {
                     let draw_y = base_y.saturating_sub(line_idx);
                     if screen_x >= 0.0 && (screen_x as usize) < width && draw_y < height {
                         let color = match &lm.kind {
-                            LandmarkKind::CheckpointPylon { .. } => Color::Green,
+                            LandmarkKind::Checkpoint { .. } => Color::Green,
                             LandmarkKind::CompanionKael { .. } => Color::Yellow,
                             LandmarkKind::SecretCache { .. } => Color::Magenta,
                             LandmarkKind::RelayNodeConsole { .. } => Color::Cyan,
@@ -1061,6 +1097,7 @@ fn checkpoint_name(name_key: &str, locale: Locale) -> String {
         "cp_high_roost" => "cp_high_roost",
         "cp_relay_node" => "cp_relay_node",
         "cp_canal_gardens" => "cp_canal_gardens",
+        "cp_track_shelter" => "cp_track_shelter",
         _ => return name_key.to_owned(),
     };
     t(key, locale).to_owned()

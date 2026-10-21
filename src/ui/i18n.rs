@@ -166,6 +166,7 @@ pub const ALL_KEYS: &[&str] = &[
     "cp_high_roost",
     "cp_relay_node",
     "cp_canal_gardens",
+    "cp_track_shelter",
     "next_checkpoint",
     "kael_encounter_dialogue",
     "kael_refuge_dialogue",
@@ -401,6 +402,7 @@ fn translate_en(key: &'static str) -> &'static str {
         "cp_high_roost" => "Upper overlook",
         "cp_relay_node" => "Switch House",
         "cp_canal_gardens" => "Canal gardens",
+        "cp_track_shelter" => "Track shelter",
         "next_checkpoint" => "NEXT STOP: {name} · {distance}m",
         "kael_encounter_dialogue" => "That switchhouse still has power. I'm heading there.",
         "kael_refuge_dialogue" => {
@@ -622,6 +624,7 @@ fn translate_fr(key: &str) -> Option<&'static str> {
         "cp_high_roost" => "Belvédère supérieur",
         "cp_relay_node" => "Maison des aiguillages",
         "cp_canal_gardens" => "Jardins du canal",
+        "cp_track_shelter" => "Abri des rails",
         "next_checkpoint" => "HALTE : {name} · {distance} m",
         "kael_encounter_dialogue" => "La maison des aiguillages est encore alimentée. J'y vais.",
         "kael_refuge_dialogue" => {
@@ -847,6 +850,7 @@ fn translate_es(key: &str) -> Option<&'static str> {
         "cp_high_roost" => "Mirador superior",
         "cp_relay_node" => "Casa de desvíos",
         "cp_canal_gardens" => "Jardines del canal",
+        "cp_track_shelter" => "Refugio de vía",
         "next_checkpoint" => "PARADA: {name} · {distance} m",
         "kael_encounter_dialogue" => "La casa de cambios aún tiene corriente. Voy para allá.",
         "kael_refuge_dialogue" => {
@@ -1066,6 +1070,7 @@ fn translate_zh(key: &str) -> Option<&'static str> {
         "cp_high_roost" => "上层观景台",
         "cp_relay_node" => "开关站",
         "cp_canal_gardens" => "运河花园",
+        "cp_track_shelter" => "轨旁避风处",
         "next_checkpoint" => "下一个歇脚处：{name} · {distance} 米",
         "kael_encounter_dialogue" => "开关站还有电。我正要过去。",
         "kael_refuge_dialogue" => "凯尔：'楼上的房间又亮了。我去把百叶窗清出来。'",
