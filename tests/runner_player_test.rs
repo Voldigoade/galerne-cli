@@ -190,7 +190,7 @@ fn test_input_buffering_triggers_jump_on_landing() {
 }
 
 #[test]
-fn traveler_action_sprites_keep_the_scarf_vane_pack_and_readable_head() {
+fn traveler_action_sprites_keep_the_scarf_and_readable_profile() {
     let actions = [
         ActionState::Idle {
             cycle_timer: 0.0,
@@ -264,20 +264,19 @@ fn traveler_action_sprites_keep_the_scarf_vane_pack_and_readable_head() {
         let artwork = sprite.join("\n");
 
         assert!(artwork.contains('~'), "Missing wind scarf in {action:?}");
-        assert!(artwork.contains("<#>"), "Missing vane pack in {action:?}");
-        assert!(artwork.contains('^'), "Missing wind crest in {action:?}");
+        assert!(artwork.contains("<#>"), "Missing kite pack in {action:?}");
         let face = if matches!(action, ActionState::Hit { .. }) {
-            'x'
+            "x>"
         } else {
-            'o'
+            "o>"
         };
-        assert!(artwork.contains(face), "Missing face in {action:?}");
+        assert!(artwork.contains(face), "Missing profile in {action:?}");
         assert!(!artwork.contains("==>"), "Cursor-like arm in {action:?}");
     }
 }
 
 #[test]
-fn large_traveler_keeps_its_wind_crest_and_vane_pack_across_actions() {
+fn large_traveler_keeps_its_kite_frame_across_actions() {
     let actions = [
         ActionState::Idle {
             cycle_timer: 0.0,
@@ -335,15 +334,22 @@ fn large_traveler_keeps_its_wind_crest_and_vane_pack_across_actions() {
         let artwork = sprite.join("\n");
 
         assert_eq!(left_offset, 12);
-        assert!(artwork.contains('^'), "Missing wind crest in {action:?}");
-        assert!(artwork.contains("<#>"), "Missing vane pack in {action:?}");
+        if matches!(action, ActionState::Gliding { .. }) {
+            assert!(
+                artwork.contains(".--____--."),
+                "Missing open kite in {action:?}"
+            );
+        } else {
+            assert!(artwork.contains("/||\\"), "Missing kite spar in {action:?}");
+        }
+        assert!(artwork.contains("<#>"), "Missing kite pack in {action:?}");
         assert!(artwork.contains('~'), "Missing scarf in {action:?}");
         assert!(!artwork.contains("[#]"), "Found old pack in {action:?}");
         let face = if matches!(action, ActionState::Hit { .. }) {
-            'x'
+            "x>"
         } else {
-            'o'
+            "o>"
         };
-        assert!(artwork.contains(face), "Missing face in {action:?}");
+        assert!(artwork.contains(face), "Missing profile in {action:?}");
     }
 }

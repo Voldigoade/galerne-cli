@@ -182,7 +182,7 @@ fn large_terminal_uses_a_taller_authored_traveler_than_the_compact_view() {
 }
 
 #[test]
-fn roomy_terminal_traveler_keeps_full_scale_through_air_actions() {
+fn roomy_terminal_traveler_keeps_art_scale_across_actions() {
     for action in [
         ActionState::Jumping {
             phase: galerne::game::runner::action::JumpPhase::Ascent,
@@ -203,6 +203,9 @@ fn roomy_terminal_traveler_keeps_full_scale_through_air_actions() {
             elapsed_secs: 0.0,
             vertical_velocity: 0.0,
         },
+        ActionState::Sliding {
+            remaining_secs: 0.2,
+        },
         ActionState::Dashing {
             remaining_secs: 0.1,
         },
@@ -212,12 +215,71 @@ fn roomy_terminal_traveler_keeps_full_scale_through_air_actions() {
         game.player.action = action;
         let mut frame = Buffer::new(236, 53);
         game.render(&mut frame, Locale::En);
+        println!(
+            "--- VISUAL QA: ROOMY TRAVELER {action:?} ---\n{}",
+            buffer_to_string(&frame)
+        );
 
+        let minimum_rows = if matches!(action, ActionState::Sliding { .. }) {
+            4
+        } else {
+            9
+        };
         assert!(
-            white_silhouette_rows(&frame, game.world.ground_y as u16) >= 9,
+            white_silhouette_rows(&frame, game.world.ground_y as u16) >= minimum_rows,
             "traveler lost its large silhouette during {action:?}"
         );
     }
+}
+
+#[test]
+fn compact_glide_renders_a_deployed_kite_over_the_traveler() {
+    let mut game = RunnerState::new(80, 24, 0x12345678);
+    game.world.chunks.clear();
+    game.player.action = ActionState::Gliding {
+        elapsed_secs: 0.0,
+        vertical_velocity: 0.0,
+    };
+    let mut frame = Buffer::new(80, 24);
+
+    game.render(&mut frame, Locale::En);
+
+    let sprite_rows = game.player.current_sprite();
+    let sprite = sprite_rows.join("\n");
+    let (canopy_row, canopy_column) = sprite_rows
+        .iter()
+        .enumerate()
+        .find_map(|(row, line)| line.find(".------.").map(|column| (row, column)))
+        .unwrap();
+    let rendered = buffer_to_string(&frame);
+    println!("--- VISUAL QA: COMPACT GLIDE (80x24) ---\n{rendered}");
+    assert!(
+        sprite.contains(".------."),
+        "compact glide needs a clear canopy"
+    );
+    assert!(
+        sprite.contains("||"),
+        "compact glide needs visible suspension lines"
+    );
+    assert!(
+        rendered.contains("o>"),
+        "compact glide must keep the profile visible"
+    );
+    assert!(
+        rendered.contains("<#>"),
+        "compact glide must keep the pack visible"
+    );
+    let canopy_x = game.player.x.round() as i32
+        - galerne::game::runner::player::PLAYER_SPRITE_LEFT_OFFSET as i32
+        + canopy_column as i32;
+    let canopy_y = game.player.y.round() as i32 - (sprite_rows.len() - 1 - canopy_row) as i32;
+    let canopy_cell = frame.get(canopy_x as u16, canopy_y as u16).unwrap();
+    assert_eq!(canopy_cell.ch, '.');
+    assert_eq!(
+        canopy_cell.fg,
+        galerne::terminal::buffer::Color::White,
+        "the opened canopy must render as player art"
+    );
 }
 
 #[test]
