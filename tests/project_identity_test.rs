@@ -2,7 +2,8 @@ use std::fs;
 use std::path::Path;
 
 use galerne::interceptor::project::{
-    derive_project_id, find_project_root, get_or_create_salt, resolve_current_project_id,
+    clean_canonicalize, derive_project_id, find_project_root, get_or_create_salt,
+    resolve_current_project_id,
 };
 
 #[test]
@@ -21,7 +22,8 @@ fn test_find_project_root_in_git_repository() {
 
     let discovered = find_project_root(&nested_subdir);
     assert_eq!(
-        discovered, repo_root,
+        discovered,
+        clean_canonicalize(&repo_root),
         "find_project_root must locate the ancestor containing .git"
     );
 
@@ -43,7 +45,8 @@ fn test_find_project_root_in_git_worktree_or_submodule() {
 
     let discovered = find_project_root(&nested);
     assert_eq!(
-        discovered, worktree_root,
+        discovered,
+        clean_canonicalize(&worktree_root),
         "find_project_root must support .git file (worktree/submodule)"
     );
 
@@ -58,7 +61,8 @@ fn test_find_project_root_fallback_to_cwd() {
 
     let discovered = find_project_root(&base);
     assert_eq!(
-        discovered, base,
+        discovered,
+        clean_canonicalize(&base),
         "find_project_root must fall back to the given directory when no .git exists"
     );
 

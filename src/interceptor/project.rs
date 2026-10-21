@@ -25,11 +25,24 @@ fn is_valid_git_marker(marker: &Path) -> bool {
     }
 }
 
+/// Canonicalizes a path if possible, stripping the Windows verbatim prefix (`\\?\`).
+pub fn clean_canonicalize(path: &Path) -> PathBuf {
+    if let Ok(canonical) = path.canonicalize() {
+        let s = canonical.to_string_lossy();
+        if let Some(stripped) = s.strip_prefix(r"\\?\") {
+            return PathBuf::from(stripped);
+        }
+        canonical
+    } else {
+        path.to_path_buf()
+    }
+}
+
 /// Discovers the root directory of the current project or workspace.
 /// Walks up the directory hierarchy looking for a valid `.git` repository or worktree.
 /// Falls back to the provided starting directory if no valid `.git` is found.
 pub fn find_project_root(start_dir: &Path) -> PathBuf {
-    let mut current = if start_dir.is_relative() {
+    let current = if start_dir.is_relative() {
         std::env::current_dir()
             .map(|cwd| cwd.join(start_dir))
             .unwrap_or_else(|_| start_dir.to_path_buf())
@@ -37,10 +50,7 @@ pub fn find_project_root(start_dir: &Path) -> PathBuf {
         start_dir.to_path_buf()
     };
 
-    // Canonicalize if possible to resolve symlinks
-    if let Ok(canonical) = current.canonicalize() {
-        current = canonical;
-    }
+    let current = clean_canonicalize(&current);
 
     let mut cursor = current.as_path();
     loop {
@@ -129,12 +139,7 @@ pub fn resolve_current_project_id(data_dir: &Path) -> String {
 }
 
 fn normalize_path(path: &Path) -> String {
-    let p = if let Ok(c) = path.canonicalize() {
-        c
-    } else {
-        path.to_path_buf()
-    };
-
+    let p = clean_canonicalize(path);
     #[allow(unused_mut)]
     let mut s = p.to_string_lossy().to_string();
     #[cfg(windows)]
