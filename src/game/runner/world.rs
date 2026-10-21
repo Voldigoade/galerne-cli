@@ -279,11 +279,6 @@ impl ChunkWorld {
             9 => {
                 obstacles.push(Obstacle::new(20.0, ground_y, ObstacleKind::Pylon));
                 obstacles.push(Obstacle::new(38.0, ground_y, ObstacleKind::LowBarrier));
-                items.push(PickupItem::new(
-                    29.0,
-                    ground_y - 1.0,
-                    ItemKind::FlowMultiplier,
-                ));
             }
             10 => {
                 items.push(PickupItem::new(30.0, ground_y - 1.0, ItemKind::GaleShard));
@@ -305,11 +300,6 @@ impl ChunkWorld {
                     WindKind::Updraft,
                 ));
                 items.push(PickupItem::new(22.0, ground_y - 6.0, ItemKind::GaleShard));
-                items.push(PickupItem::new(
-                    28.0,
-                    ground_y - 8.0,
-                    ItemKind::FlowMultiplier,
-                ));
             }
             14 => {
                 wind_currents.push(WindCurrent::new(

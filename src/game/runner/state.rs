@@ -6,6 +6,7 @@ use unicode_width::UnicodeWidthStr;
 
 use super::action::{ActionState, PlayerInput};
 use super::items::{FloatingIndicator, ItemKind};
+use super::obstacles::ObstacleKind;
 use super::player::{RunnerPlayer, PLAYER_WIDTH};
 use super::region::{sector_for_distance, SectorKind};
 use super::wind::{TailwindTier, WindKind};
@@ -19,6 +20,9 @@ pub const SPEED_ACCELERATION_RATE: f32 = 0.15;
 const INTERACTION_RADIUS: f32 = 6.0;
 const INTERACTION_PROMPT_RADIUS: f32 = 12.0;
 const INTERACTION_ACCEPT_RADIUS: f32 = 14.0;
+const FLOW_WINDOW_SECS: f32 = 4.0;
+const FLOW_STEP: f32 = 0.05;
+const FLOW_MAX_STEPS: u8 = 4;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct RunnerSnapshot {
@@ -26,7 +30,6 @@ pub struct RunnerSnapshot {
     pub speed: f32,
     pub score: u32,
     pub shards_collected: u32,
-    pub flow_multiplier: f32,
     pub player_y: f32,
     pub player_action: ActionState,
     pub player_shields: u32,
@@ -59,6 +62,9 @@ pub struct RunnerState {
     pub score: u32,
     pub shards_collected: u32,
     pub flow_multiplier: f32,
+    pub workshop_shard_multiplier: f32,
+    pub flow_timer_secs: f32,
+    pub flow_steps: u8,
     pub floating_indicators: Vec<FloatingIndicator>,
     pub onboarding_jump_done: bool,
     pub onboarding_slide_done: bool,
@@ -67,7 +73,6 @@ pub struct RunnerState {
     pub transition_remaining_secs: Option<f32>,
     pub transition_success: bool,
     pub active_magnet_timer: f32,
-    pub active_multiplier_timer: f32,
     pub active_surge_timer: f32,
     #[serde(default)]
     pub relay_restored: bool,
@@ -106,6 +111,9 @@ impl RunnerState {
             score: 0,
             shards_collected: 0,
             flow_multiplier: 1.0,
+            workshop_shard_multiplier: 1.0,
+            flow_timer_secs: 0.0,
+            flow_steps: 0,
             floating_indicators: Vec::with_capacity(8),
             onboarding_jump_done: false,
             onboarding_slide_done: false,
@@ -114,7 +122,6 @@ impl RunnerState {
             transition_remaining_secs: None,
             transition_success: true,
             active_magnet_timer: 0.0,
-            active_multiplier_timer: 0.0,
             active_surge_timer: 0.0,
             relay_restored: false,
             canal_gate_opened: false,
@@ -160,7 +167,6 @@ impl RunnerState {
             speed: self.speed,
             score: self.score,
             shards_collected: self.shards_collected,
-            flow_multiplier: self.flow_multiplier,
             player_y: self.player.y,
             player_action: self.player.action,
             player_shields: self.player.shields,
@@ -184,7 +190,6 @@ impl RunnerState {
         self.speed = snap.speed;
         self.score = snap.score;
         self.shards_collected = snap.shards_collected;
-        self.flow_multiplier = snap.flow_multiplier;
         self.player.y = snap.player_y;
         self.player.action = snap.player_action;
         self.player.shields = snap.player_shields;
@@ -323,10 +328,11 @@ impl RunnerState {
         if self.active_magnet_timer > 0.0 {
             self.active_magnet_timer = (self.active_magnet_timer - dt).max(0.0);
         }
-        if self.active_multiplier_timer > 0.0 {
-            self.active_multiplier_timer = (self.active_multiplier_timer - dt).max(0.0);
-            if self.active_multiplier_timer <= 0.0 {
+        if self.flow_timer_secs > 0.0 {
+            self.flow_timer_secs = (self.flow_timer_secs - dt).max(0.0);
+            if self.flow_timer_secs == 0.0 {
                 self.flow_multiplier = 1.0;
+                self.flow_steps = 0;
             }
         }
         if self.active_surge_timer > 0.0 {
@@ -344,6 +350,7 @@ impl RunnerState {
 
         let dx = effective_speed * dt;
         self.distance += dx;
+        let previous_scroll_x = self.world.scroll_x;
         self.world.update(dx);
         let player_world_x = self.world.scroll_x + self.player.x + PLAYER_WIDTH as f32 / 2.0;
         let platform_y = self.world.walkway_y_at(player_world_x);
@@ -358,10 +365,15 @@ impl RunnerState {
             self.onboarding_slide_done = true;
         }
 
-        self.update_collisions_and_interactions(dt, input);
+        self.update_collisions_and_interactions(dt, input, previous_scroll_x);
     }
 
-    fn update_collisions_and_interactions(&mut self, dt: f32, input: Option<PlayerInput>) {
+    fn update_collisions_and_interactions(
+        &mut self,
+        dt: f32,
+        input: Option<PlayerInput>,
+        previous_scroll_x: f32,
+    ) {
         let (p_x1, p_y1, p_x2, p_y2) = self.player.bounding_box();
         let scroll_x = self.world.scroll_x;
         let abs_player_x = scroll_x + self.player.x;
@@ -370,6 +382,9 @@ impl RunnerState {
         let mut collected_items = [None; 8];
         let mut collected_count = 0;
         let mut collided = false;
+        let mut clean_obstacles = 0;
+        let player_action = self.player.action;
+        let on_elevated_route = self.player.y < self.world.ground_y as f32 - 2.0;
 
         let magnet_radius = if self.active_magnet_timer > 0.0 {
             16.0
@@ -545,15 +560,32 @@ impl RunnerState {
                 }
             }
 
-            if self.player.invulnerable_timer <= 0.0 && !collided {
-                for obs in &chunk.obstacles {
-                    let (o_x1, o_y1, o_x2, o_y2) = obs.bounding_box(chunk_start_x);
-                    let screen_o_x1 = o_x1 - scroll_x;
-                    let screen_o_x2 = o_x2 - scroll_x;
+            for obs in &mut chunk.obstacles {
+                let (o_x1, o_y1, o_x2, o_y2) = obs.bounding_box(chunk_start_x);
+                let screen_o_x1 = o_x1 - scroll_x;
+                let screen_o_x2 = o_x2 - scroll_x;
 
-                    if p_x1 < screen_o_x2 && p_x2 > screen_o_x1 && p_y1 < o_y2 && p_y2 > o_y1 {
-                        collided = true;
-                        break;
+                if self.player.invulnerable_timer <= 0.0
+                    && !collided
+                    && p_x1 < screen_o_x2
+                    && p_x2 > screen_o_x1
+                    && p_y1 < o_y2
+                    && p_y2 > o_y1
+                {
+                    collided = true;
+                    break;
+                }
+
+                let previous_screen_o_x2 = o_x2 - previous_scroll_x;
+                if !obs.cleared
+                    && previous_screen_o_x2 >= self.player.x
+                    && screen_o_x2 < self.player.x
+                {
+                    obs.cleared = true;
+                    if !collided
+                        && (on_elevated_route || action_clears_obstacle(player_action, obs.kind))
+                    {
+                        clean_obstacles += 1;
                     }
                 }
             }
@@ -565,24 +597,32 @@ impl RunnerState {
 
         if collided {
             self.handle_player_collision();
+        } else {
+            for _ in 0..clean_obstacles {
+                self.record_clean_traversal();
+            }
         }
+    }
+
+    fn record_clean_traversal(&mut self) {
+        self.flow_steps = (self.flow_steps + 1).min(FLOW_MAX_STEPS);
+        self.flow_multiplier = 1.0 + f32::from(self.flow_steps) * FLOW_STEP;
+        self.flow_timer_secs = FLOW_WINDOW_SECS;
+    }
+
+    fn reset_flow(&mut self) {
+        self.flow_multiplier = 1.0;
+        self.flow_timer_secs = 0.0;
+        self.flow_steps = 0;
     }
 
     fn apply_item_pickup(&mut self, kind: ItemKind) {
         match kind {
             ItemKind::GaleShard => {
-                let gain = (10.0 * self.flow_multiplier) as u32;
+                let multiplier = self.workshop_shard_multiplier + self.flow_multiplier - 1.0;
+                let gain = (10.0 * multiplier) as u32;
                 self.shards_collected += gain;
                 self.score += gain * 5;
-                self.floating_indicators.push(FloatingIndicator::new(
-                    self.player.x + 1.0,
-                    self.player.y - 4.5,
-                    crate::ui::i18n::format_message(
-                        "pickup_shards",
-                        self.locale,
-                        &[("count", gain.to_string())],
-                    ),
-                ));
             }
             ItemKind::SpeedSurge => {
                 self.active_surge_timer = 5.0;
@@ -609,15 +649,6 @@ impl RunnerState {
                     self.player.x + 1.0,
                     self.player.y - 4.5,
                     t("pickup_magnet", self.locale),
-                ));
-            }
-            ItemKind::FlowMultiplier => {
-                self.flow_multiplier = 2.0;
-                self.active_multiplier_timer = 8.0;
-                self.floating_indicators.push(FloatingIndicator::new(
-                    self.player.x + 1.0,
-                    self.player.y - 4.5,
-                    t("pickup_flow", self.locale),
                 ));
             }
             ItemKind::ResonanceCore => {
@@ -672,7 +703,7 @@ impl RunnerState {
         if self.player.shields > 0 {
             self.player.shields -= 1;
             self.player.invulnerable_timer = 1.2;
-            self.flow_multiplier = 1.0;
+            self.reset_flow();
             self.floating_indicators.push(FloatingIndicator::new(
                 self.player.x + 1.0,
                 self.player.y - 4.5,
@@ -688,7 +719,7 @@ impl RunnerState {
             self.distance = self.last_checkpoint_distance;
             self.world.scroll_x = (self.last_checkpoint_distance - self.player.x).max(0.0);
             self.player.y = self.world.ground_y as f32;
-            self.flow_multiplier = 1.0;
+            self.reset_flow();
             self.floating_indicators.push(FloatingIndicator::new(
                 self.player.x + 1.0,
                 self.player.y - 4.5,
@@ -815,7 +846,6 @@ impl RunnerState {
                         ItemKind::SpeedSurge => Color::Cyan,
                         ItemKind::WindShield => Color::Green,
                         ItemKind::ShardMagnet => Color::Blue,
-                        ItemKind::FlowMultiplier => Color::Magenta,
                         ItemKind::ResonanceCore => Color::Cyan,
                         ItemKind::InductionFilament => Color::White,
                         ItemKind::AncientCompass => Color::Yellow,
@@ -1012,6 +1042,22 @@ fn cache_contents_locked(chunk: &Chunk, cache_found: bool) -> bool {
             .landmarks
             .iter()
             .any(|landmark| matches!(&landmark.kind, LandmarkKind::SecretCache { opened: false }))
+}
+
+fn action_clears_obstacle(action: ActionState, kind: ObstacleKind) -> bool {
+    if matches!(action, ActionState::Dashing { .. }) {
+        return true;
+    }
+
+    match kind {
+        ObstacleKind::LowBarrier | ObstacleKind::Pylon => {
+            matches!(
+                action,
+                ActionState::Jumping { .. } | ActionState::Gliding { .. }
+            )
+        }
+        ObstacleKind::OverheadPipe => matches!(action, ActionState::Sliding { .. }),
+    }
 }
 
 fn checkpoint_name(name_key: &str, locale: Locale) -> String {

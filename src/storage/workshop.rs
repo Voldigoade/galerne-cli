@@ -129,6 +129,6 @@ pub fn apply_workshop_to_runner(workshop: &WorkshopLevels, runner: &mut RunnerSt
         runner.speed += (workshop.move_speed_level as f32) * 1.5;
     }
     if workshop.shard_multiplier_level > 0 {
-        runner.flow_multiplier += (workshop.shard_multiplier_level as f32) * 0.20;
+        runner.workshop_shard_multiplier = 1.0 + (workshop.shard_multiplier_level as f32) * 0.20;
     }
 }

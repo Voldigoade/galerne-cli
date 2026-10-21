@@ -87,14 +87,4 @@ impl TailwindTier {
             TailwindTier::Tier4 => 6.0,
         }
     }
-
-    pub fn flow_multiplier_bonus(&self) -> f32 {
-        match self {
-            TailwindTier::None => 0.0,
-            TailwindTier::Tier1 => 0.1,
-            TailwindTier::Tier2 => 0.2,
-            TailwindTier::Tier3 => 0.35,
-            TailwindTier::Tier4 => 0.5,
-        }
-    }
 }

@@ -113,13 +113,18 @@ fn resumed_task_keeps_the_current_build_tailwind() {
     previous_task.tailwind_tier = TailwindTier::Tier4;
     let mut old_snapshot = serde_json::to_value(previous_task.create_snapshot()).unwrap();
     old_snapshot["tailwind_tier"] = serde_json::json!("Tier4");
+    old_snapshot["flow_multiplier"] = serde_json::json!(1.8);
+    old_snapshot["flow_timer_secs"] = serde_json::json!(3.0);
     let snapshot = serde_json::from_value(old_snapshot).unwrap();
 
     let mut resumed_task = RunnerState::new(80, 24, 0x2222);
     resumed_task.tailwind_tier = TailwindTier::Tier2;
+    resumed_task.workshop_shard_multiplier = 1.4;
     resumed_task.resume_snapshot(&snapshot);
 
     assert_eq!(resumed_task.tailwind_tier, TailwindTier::Tier2);
+    assert_eq!(resumed_task.flow_multiplier, 1.0);
+    assert_eq!(resumed_task.flow_timer_secs, 0.0);
 }
 
 #[test]
@@ -128,12 +133,16 @@ fn manual_resume_does_not_inherit_a_previous_build_tailwind() {
     previous_task.tailwind_tier = TailwindTier::Tier4;
     let mut old_snapshot = serde_json::to_value(previous_task.create_snapshot()).unwrap();
     old_snapshot["tailwind_tier"] = serde_json::json!("Tier4");
+    old_snapshot["flow_multiplier"] = serde_json::json!(1.8);
+    old_snapshot["flow_timer_secs"] = serde_json::json!(3.0);
     let snapshot = serde_json::from_value(old_snapshot).unwrap();
 
     let mut manual_game = RunnerState::new(80, 24, 0x2222);
     manual_game.resume_snapshot(&snapshot);
 
     assert_eq!(manual_game.tailwind_tier, TailwindTier::None);
+    assert_eq!(manual_game.flow_multiplier, 1.0);
+    assert_eq!(manual_game.flow_timer_secs, 0.0);
 }
 
 #[test]

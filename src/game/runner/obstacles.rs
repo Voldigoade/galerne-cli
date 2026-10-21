@@ -17,11 +17,18 @@ pub struct Obstacle {
     pub rel_x: f32, // Relative x offset within the chunk (0.0 to CHUNK_WIDTH)
     pub y: f32,     // Base y position (on ground or elevated)
     pub kind: ObstacleKind,
+    #[serde(default)]
+    pub cleared: bool,
 }
 
 impl Obstacle {
     pub fn new(rel_x: f32, y: f32, kind: ObstacleKind) -> Self {
-        Self { rel_x, y, kind }
+        Self {
+            rel_x,
+            y,
+            kind,
+            cleared: false,
+        }
     }
 
     pub fn width(&self) -> usize {

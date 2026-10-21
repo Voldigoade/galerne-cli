@@ -64,5 +64,6 @@ fn test_apply_workshop_to_runner() {
     galerne::storage::workshop::apply_workshop_to_runner(&workshop, &mut runner);
     assert_eq!(runner.player.shields, 2); // 1 base + 1 from rank 2
     assert!(runner.speed > 18.0);
-    assert!(runner.flow_multiplier > 1.0);
+    assert!(runner.workshop_shard_multiplier > 1.0);
+    assert_eq!(runner.flow_multiplier, 1.0);
 }

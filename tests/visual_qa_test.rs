@@ -220,6 +220,20 @@ fn roomy_terminal_traveler_keeps_full_scale_through_air_actions() {
 }
 
 #[test]
+fn flow_feedback_stays_in_the_hud() {
+    let mut game = RunnerState::new(80, 24, 0x12345678);
+    game.flow_multiplier = 1.2;
+    let mut frame = Buffer::new(80, 24);
+
+    game.render(&mut frame, Locale::En);
+
+    let rendered = buffer_to_string(&frame);
+    println!("--- VISUAL QA: QUIET FLOW FEEDBACK (80x24) ---\n{rendered}");
+    assert!(rendered.lines().next().unwrap().contains("FLOW x1.2"));
+    assert!(game.floating_indicators.is_empty());
+}
+
+#[test]
 fn cache_action_prompt_is_rendered_in_each_supported_locale() {
     let mut game = RunnerState::new(80, 24, 0x8765);
     let ground_y = game.world.ground_y as f32;
