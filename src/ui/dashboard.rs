@@ -125,20 +125,20 @@ pub fn render_refuge_panel(
     }
 
     let y_info = py + 11;
-    let kael_status = if save_state.companion.kael_at_refuge {
-        t("refuge_kael_present", locale)
-    } else if save_state.companion.met_kael {
-        t("refuge_companion_met", locale)
+    let companion_status = if save_state.companion.companion_at_refuge {
+        t("refuge_companion_present", locale)
+    } else if save_state.companion.met_companion {
+        t("malo_met_status", locale)
     } else {
-        t("refuge_kael_absent", locale)
+        t("refuge_companion_not_met", locale)
     };
     buf.draw_str(
         px,
         y_info,
-        kael_status,
-        if save_state.companion.kael_at_refuge {
+        companion_status,
+        if save_state.companion.companion_at_refuge {
             Color::Yellow
-        } else if save_state.companion.met_kael {
+        } else if save_state.companion.met_companion {
             Color::Cyan
         } else {
             Color::DarkGrey
@@ -191,11 +191,11 @@ pub fn render_refuge_panel(
         Style::new(Color::Cyan, bg).bold(),
     );
 
-    if is_restored && save_state.companion.kael_at_refuge {
+    if is_restored && save_state.companion.companion_at_refuge {
         buf.draw_str_styled(
             px,
             y_info + 5,
-            t("kael_refuge_dialogue", locale),
+            t("malo_refuge_dialogue", locale),
             Style::new(Color::Yellow, bg).bold(),
         );
     }
@@ -1141,10 +1141,10 @@ fn sync_game_to_save_state(
         save_state.refuge.power_restored = true;
     }
     if game.companion_met {
-        save_state.companion.met_kael = true;
+        save_state.companion.met_companion = true;
     }
-    if save_state.world_progress.relay_restored && save_state.companion.met_kael {
-        save_state.companion.kael_at_refuge = true;
+    if save_state.world_progress.relay_restored && save_state.companion.met_companion {
+        save_state.companion.companion_at_refuge = true;
     }
     if game.secret_cache_found {
         save_state.world_progress.secret_cache_found = true;

@@ -252,7 +252,7 @@ impl RunnerState {
                 }
 
                 let prompt = match &landmark.kind {
-                    LandmarkKind::CompanionKael { spoken } if !spoken && !self.companion_met => {
+                    LandmarkKind::Companion { spoken } if !spoken && !self.companion_met => {
                         Some("prompt_greet_companion")
                     }
                     LandmarkKind::SecretCache { opened } if !opened && !self.secret_cache_found => {
@@ -508,7 +508,7 @@ impl RunnerState {
                                 ));
                             }
                         }
-                        LandmarkKind::CompanionKael { spoken }
+                        LandmarkKind::Companion { spoken }
                             if interaction_pressed && !*spoken && !self.companion_met =>
                         {
                             *spoken = true;
@@ -516,7 +516,7 @@ impl RunnerState {
                             self.floating_indicators.push(FloatingIndicator::new(
                                 self.player.x + 1.0,
                                 self.player.y - 5.5,
-                                t("kael_encounter_dialogue", self.locale),
+                                t("malo_encounter_dialogue", self.locale),
                             ));
                         }
                         LandmarkKind::SecretCache { opened }
@@ -553,7 +553,7 @@ impl RunnerState {
                                 t("canal_flow_restored", self.locale),
                             ));
                         }
-                        LandmarkKind::CompanionKael { .. }
+                        LandmarkKind::Companion { .. }
                         | LandmarkKind::SecretCache { .. }
                         | LandmarkKind::RelayNodeConsole { .. }
                         | LandmarkKind::CanalSluice { .. } => {}
@@ -843,7 +843,7 @@ impl RunnerState {
                     if screen_x >= 0.0 && (screen_x as usize) < width && draw_y < height {
                         let color = match &lm.kind {
                             LandmarkKind::Checkpoint { .. } => Color::Green,
-                            LandmarkKind::CompanionKael { .. } => Color::Yellow,
+                            LandmarkKind::Companion { .. } => Color::Yellow,
                             LandmarkKind::SecretCache { .. } => Color::Magenta,
                             LandmarkKind::RelayNodeConsole { .. } => Color::Cyan,
                             LandmarkKind::CanalSluice { .. } => Color::Cyan,

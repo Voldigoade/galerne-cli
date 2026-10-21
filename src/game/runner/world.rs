@@ -22,7 +22,7 @@ pub const REPEATING_CHECKPOINT_SPACING: usize = 300;
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum LandmarkKind {
     Checkpoint { id: u32, name_key: String },
-    CompanionKael { spoken: bool },
+    Companion { spoken: bool },
     SecretCache { opened: bool },
     RelayNodeConsole { restored: bool },
     CanalSluice { opened: bool },
@@ -46,7 +46,9 @@ impl Landmark {
                 &[" .------. ", "/| [] |\\", "||    ||", "|______|"]
             }
             LandmarkKind::Checkpoint { .. } => &[" [+] ", "/===\\", "| # |", "|---|"],
-            LandmarkKind::CompanionKael { .. } => &[" ,(^)  ", "<{#}>~ ", "==[#]==="],
+            LandmarkKind::Companion { .. } => {
+                &["  *    ", "  |    ", " (o)   ", "/|#|\\  ", "/   \\"]
+            }
             LandmarkKind::SecretCache { opened: false } => &["  .---.  ", "=[*###*]="],
             LandmarkKind::SecretCache { opened: true } => {
                 &[" .----.  ", "/|    |\\ ", "|| [] ||", "|______|"]
@@ -74,8 +76,9 @@ impl Landmark {
     pub fn bounding_box(&self, chunk_start_x: f32) -> (f32, f32, f32, f32) {
         let abs_x = chunk_start_x + self.rel_x;
         let w = match &self.kind {
+            LandmarkKind::Checkpoint { name_key, .. } if name_key == "cp_track_shelter" => 10.0,
             LandmarkKind::Checkpoint { .. } => 5.0,
-            LandmarkKind::CompanionKael { .. } => 8.0,
+            LandmarkKind::Companion { .. } => 7.0,
             LandmarkKind::SecretCache { .. } => 9.0,
             LandmarkKind::RelayNodeConsole { .. } => 9.0,
             LandmarkKind::CanalSluice { .. } => 13.0,
@@ -342,7 +345,7 @@ impl ChunkWorld {
                 landmarks.push(Landmark::new(
                     25.0,
                     ground_y,
-                    LandmarkKind::CompanionKael { spoken: false },
+                    LandmarkKind::Companion { spoken: false },
                 ));
                 items.push(PickupItem::new(15.0, ground_y - 1.0, ItemKind::GaleShard));
             }

@@ -237,10 +237,10 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
         save_state.refuge.power_restored = true;
     }
     if game.companion_met {
-        save_state.companion.met_kael = true;
+        save_state.companion.met_companion = true;
     }
-    if save_state.world_progress.relay_restored && save_state.companion.met_kael {
-        save_state.companion.kael_at_refuge = true;
+    if save_state.world_progress.relay_restored && save_state.companion.met_companion {
+        save_state.companion.companion_at_refuge = true;
     }
     if game.secret_cache_found {
         save_state.world_progress.secret_cache_found = true;

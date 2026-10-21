@@ -113,12 +113,15 @@ impl WorldProgress {
     }
 }
 
-/// State of the first companion (Kael, the Gantry Watcher).
+/// Discovery, conversation, and refuge state for Malo.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CompanionProgress {
-    pub met_kael: bool,
-    pub spoken_to_kael: bool,
-    pub kael_at_refuge: bool,
+    #[serde(rename = "met_kael")]
+    pub met_companion: bool,
+    #[serde(rename = "spoken_to_kael")]
+    pub spoken_to_companion: bool,
+    #[serde(rename = "kael_at_refuge")]
+    pub companion_at_refuge: bool,
 }
 
 /// State and facilities of the persistent base camp (The Refuge).

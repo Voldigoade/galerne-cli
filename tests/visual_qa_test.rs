@@ -492,8 +492,8 @@ fn restoring_the_line_does_not_invent_a_refuge_companion() {
     render_refuge_panel(&mut buf, &save, 0, 0, Locale::En);
     let rendered = buffer_to_string(&buf);
 
-    assert!(rendered.contains("Kael: Roaming the high viaduct"));
-    assert!(!rendered.contains("Kael: Stationed at the observation window"));
+    assert!(rendered.contains("No one has returned to the refuge yet"));
+    assert!(!rendered.contains("Malo: cleaning the refuge lamp"));
 }
 
 #[test]
@@ -902,9 +902,10 @@ fn test_visual_qa_interior_gantry_sector2_120x35() {
 #[test]
 fn test_visual_qa_companion_roost_sector3_120x35() {
     let mut game = RunnerState::new(120, 35, 0x12345678);
-    game.distance = 900.0;
-    game.world.scroll_x = 900.0;
-    game.world.ensure_chunks_generated(900.0 + 200.0);
+    game.distance = 760.0;
+    game.world.scroll_x = 760.0;
+    game.world.parallax.set_world_position(760.0);
+    game.world.ensure_chunks_generated(960.0);
 
     let mut buf = Buffer::new(120, 35);
     game.render(&mut buf, Locale::En);
@@ -915,7 +916,8 @@ fn test_visual_qa_companion_roost_sector3_120x35() {
         rendered
     );
     assert_eq!(rendered.lines().count(), 35);
-    assert!(rendered.contains("900m") || rendered.contains("DIST"));
+    assert!(rendered.contains("760m") || rendered.contains("DIST"));
+    assert!(rendered.contains("(o)"));
 }
 
 #[test]
@@ -937,7 +939,7 @@ fn test_visual_qa_refuge_dormant_and_restored_80x24() {
     // 2. Restored refuge
     let mut restored_save = SaveState::default();
     restored_save.world_progress.relay_restored = true;
-    restored_save.companion.kael_at_refuge = true;
+    restored_save.companion.companion_at_refuge = true;
     restored_save.refuge.power_restored = true;
     let mut buf_restored = Buffer::new(80, 24);
     render_refuge_panel(&mut buf_restored, &restored_save, 2, 2, Locale::En);
@@ -949,7 +951,7 @@ fn test_visual_qa_refuge_dormant_and_restored_80x24() {
     assert!(rendered_restored.contains("Status: lit"));
     assert!(rendered_restored.contains("[====]"));
     assert!(!rendered_restored.contains("POWERED VIADUCT GANTRY"));
-    assert!(rendered_restored.contains("Kael: Stationed at the observation window"));
+    assert!(rendered_restored.contains("Malo: cleaning the refuge lamp"));
 }
 
 #[test]
@@ -964,14 +966,23 @@ fn test_refuge_panel_uses_selected_locale() {
             "refuge status should use locale {:?}",
             locale
         );
+        assert!(rendered.contains(t("refuge_companion_not_met", locale)));
         if locale == Locale::En {
             println!("--- WORKBENCH LOCKED REFUGE (100x24) ---\n{rendered}");
         }
         assert!(rendered.contains(t("refuge_workbench_locked", locale)));
         assert!(rendered.contains("1/6"));
 
+        save.companion.met_companion = true;
+        let mut met = Buffer::new(100, 24);
+        render_refuge_panel(&mut met, &save, 2, 2, locale);
+        assert!(buffer_to_string(&met).contains(t("malo_met_status", locale)));
+
         save.inventory
             .add(galerne::storage::ItemKind::InductionFilament, 1);
+        save.world_progress.relay_restored = true;
+        save.companion.companion_at_refuge = true;
+        save.refuge.power_restored = true;
         let mut repaired = Buffer::new(100, 24);
         render_refuge_panel(&mut repaired, &save, 2, 2, locale);
         let repaired = buffer_to_string(&repaired);
@@ -980,6 +991,8 @@ fn test_refuge_panel_uses_selected_locale() {
         }
         assert!(repaired.contains(t("refuge_workbench_status", locale)));
         assert!(!repaired.contains(t("refuge_workbench_locked", locale)));
+        assert!(repaired.contains(t("refuge_companion_present", locale)));
+        assert!(repaired.contains(t("malo_refuge_dialogue", locale)));
     }
 }
 

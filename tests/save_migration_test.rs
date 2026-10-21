@@ -2,7 +2,7 @@ use std::fs;
 
 use galerne::storage::atomic::{decode_and_verify, encode_with_header};
 use galerne::storage::manager::{SaveLoadError, SaveManager};
-use galerne::storage::schema::{SaveState, CURRENT_SCHEMA_VERSION};
+use galerne::storage::schema::{CompanionProgress, SaveState, CURRENT_SCHEMA_VERSION};
 
 #[test]
 fn test_v1_save_fixture_loads_perfectly() {
@@ -111,9 +111,29 @@ fn test_v2_save_migrates_cleanly_to_v3() {
         "cinder_line_viaduct"
     );
     assert!(!loaded.world_progress.relay_restored);
-    assert!(!loaded.companion.met_kael);
+    assert!(!loaded.companion.met_companion);
 
     let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[test]
+fn existing_companion_save_keys_keep_their_meaning() {
+    let legacy = serde_json::json!({
+        "met_kael": true,
+        "spoken_to_kael": true,
+        "kael_at_refuge": true
+    });
+
+    let progress: CompanionProgress = serde_json::from_value(legacy).expect("load existing keys");
+    assert!(progress.met_companion);
+    assert!(progress.spoken_to_companion);
+    assert!(progress.companion_at_refuge);
+
+    let encoded = serde_json::to_value(progress).expect("write compatible keys");
+    assert_eq!(encoded["met_kael"].as_bool(), Some(true));
+    assert_eq!(encoded["spoken_to_kael"].as_bool(), Some(true));
+    assert_eq!(encoded["kael_at_refuge"].as_bool(), Some(true));
+    assert!(encoded.get("met_companion").is_none());
 }
 
 #[test]

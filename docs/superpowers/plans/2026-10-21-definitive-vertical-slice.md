@@ -6,7 +6,7 @@
 Transform Galerne from a generic runner prototype into a terminal-native side-scrolling atmospheric expedition:
 - **Region:** *The Cinder Line Viaduct* — a monumental ancient transit spine spanning a windy rift, overgrown with hardy flora and retrofitted with suspended human dwellings.
 - **Player:** The *Traveler* — authored multi-cell silhouette with wind cowl, flowing scarf, traversal pack with aerodynamic wind-fins.
-- **Objective:** Traverse three distinct sectors, navigate route forks (Lower Pylons, Interior Machinery Tunnel, High Sky Truss), meet companion **Kael**, and restore **Relay Station 04 (The Gale Node)**.
+- **Objective:** Traverse three distinct sectors, navigate route forks (Lower Pylons, Interior Machinery Tunnel, High Sky Truss), meet **Malo**, who tends the upper-walk lamps, and restore **Relay Station 04**.
 - **Refuge:** A persistent base camp inside an abandoned railway gantry that visibly transforms and powers up once the Line is restored.
 - **Technical Model:** 
   - Fixed-grid coordinate system with diff-buffer terminal rendering.
@@ -37,7 +37,7 @@ Transform Galerne from a generic runner prototype into a terminal-native side-sc
 - Authored sector sequence:
   - Sector 1: *Lower Viaduct & Shanty Cables* (Checkpoints 1 & 2, low barriers, wind updrafts).
   - Sector 2: *Interior Gantry & Ventilation Shaft* (Quiet interior traversal, ceiling hazards, discovery cache).
-  - Sector 3: *The High Truss & Observation Roost* (Branching path, companion encounter with Kael, wind bridge).
+  - Sector 3: *The High Truss & Observation Roost* (Branching path, encounter Malo on the upper walk, wind bridge).
   - Sector 4: *The Gale Node (Relay Station 04)* (Final approach, traversal puzzle, activation mechanism).
 - Checkpoints & safe respawn with zero inventory loss.
 
@@ -46,14 +46,14 @@ Transform Galerne from a generic runner prototype into a terminal-native side-sc
 - Tailwind Build Bonus: tiers I through IV based on smart task duration prediction, neutral on manual play.
 - Flow multiplier system: reward clean vaults and glides with subtle visual audio-visual resonance.
 
-### Phase E: Inventory, Discoveries & Companion Kael
+### Phase E: Inventory, Discoveries & Companion Malo
 - Item catalog: *Resonance Core*, *Induction Filament*, *Ancient Compass*, *Gale Shards*.
-- Companion Kael: authored ASCII character, observation shelter, localized dialogue, moves to refuge upon Line restoration.
+- Malo tends the lamps along the upper walk. His authored sprite and short localized lines reflect that work; he returns to the refuge when the Line is restored.
 - Discovery: hidden maintenance chamber with ancient relic.
 
 ### Phase F: The Persistent Refuge
 - Base camp view accessible via dashboard.
-- Dual state: Dormant (cold, dark, abandoned) vs Restored (powered Line rails, glowing coils, Kael present).
+- Dual state: Dormant (cold, dark, abandoned) vs Restored (powered Line rails, moving tram, Malo at the refuge).
 - Workbench functionality for inspecting relics and refining traversal equipment.
 
 ### Phase G: Relay Activation & World Consequence

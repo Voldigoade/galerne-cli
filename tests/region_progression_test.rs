@@ -10,7 +10,7 @@ use galerne::game::runner::world::{
 };
 use galerne::storage::schema::WorldProgress;
 use galerne::terminal::buffer::Buffer;
-use galerne::ui::i18n::Locale;
+use galerne::ui::i18n::{t, Locale, ALL_LOCALES};
 
 #[test]
 fn test_region_progression_unlocks_landmarks() {
@@ -645,26 +645,40 @@ fn interacting_with_the_switchhouse_reconnects_the_line() {
 
 #[test]
 fn a_companion_is_not_met_by_running_past() {
-    let mut game = state_with_nearby_landmark(LandmarkKind::CompanionKael { spoken: false });
+    let mut game = state_with_nearby_landmark(LandmarkKind::Companion { spoken: false });
 
     game.update(0.01, None);
 
     assert!(!game.companion_met);
     assert!(matches!(
         &game.world.chunks[0].landmarks[0].kind,
-        LandmarkKind::CompanionKael { spoken: false }
+        LandmarkKind::Companion { spoken: false }
     ));
 }
 
 #[test]
 fn greeting_the_companion_marks_the_encounter_once() {
-    let mut game = state_with_nearby_landmark(LandmarkKind::CompanionKael { spoken: false });
+    let mut game = state_with_nearby_landmark(LandmarkKind::Companion { spoken: false });
 
     game.update(0.01, Some(PlayerInput::Interact));
     game.update(0.01, Some(PlayerInput::Interact));
 
     assert!(game.companion_met);
     assert_eq!(game.floating_indicators.len(), 1);
+}
+
+#[test]
+fn greeting_malo_uses_the_selected_locale() {
+    for &locale in ALL_LOCALES {
+        let mut game = state_with_nearby_landmark(LandmarkKind::Companion { spoken: false });
+        game.set_locale(locale);
+        game.update(0.01, Some(PlayerInput::Interact));
+
+        assert_eq!(
+            game.floating_indicators[0].text,
+            t("malo_encounter_dialogue", locale)
+        );
+    }
 }
 
 #[test]
