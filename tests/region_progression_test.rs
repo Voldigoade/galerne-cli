@@ -1,6 +1,8 @@
-use galerne::game::runner::action::{ActionState, PlayerInput};
+use galerne::game::runner::action::{ActionState, InputBuffer, PlayerInput, PlayerInputWrapper};
+use galerne::game::runner::items::{ItemKind, PickupItem};
 use galerne::game::runner::region::{sector_for_distance, SectorKind};
 use galerne::game::runner::state::RunnerState;
+use galerne::game::runner::world::{Chunk, Landmark, LandmarkKind};
 use galerne::terminal::buffer::Buffer;
 use galerne::ui::i18n::Locale;
 
@@ -17,7 +19,13 @@ fn test_region_progression_unlocks_landmarks() {
 
     for _ in 0..3000 {
         game.player.invulnerable_timer = 10.0;
-        game.update(0.033, None);
+        let input = match game.current_prompt() {
+            Some("prompt_greet_companion" | "prompt_search_cache" | "prompt_connect_line") => {
+                Some(PlayerInput::Interact)
+            }
+            _ => None,
+        };
+        game.update(0.033, input);
         if game.distance >= 1260.0 {
             break;
         }
@@ -119,7 +127,13 @@ fn test_line_restoration_visual_sequence() {
 
     for _ in 0..3000 {
         game.player.invulnerable_timer = 10.0;
-        game.update(0.033, None);
+        let input = match game.current_prompt() {
+            Some("prompt_greet_companion" | "prompt_search_cache" | "prompt_connect_line") => {
+                Some(PlayerInput::Interact)
+            }
+            _ => None,
+        };
+        game.update(0.033, input);
         if game.distance >= 1260.0 {
             break;
         }
@@ -140,4 +154,151 @@ fn test_line_restoration_visual_sequence() {
         surge_row.contains('~') || surge_row.contains('*') || surge_row.contains('+'),
         "Restoration should animate across the track"
     );
+}
+fn state_with_nearby_landmark(kind: LandmarkKind) -> RunnerState {
+    let mut game = RunnerState::new(80, 24, 0x1324);
+    let ground_y = game.world.ground_y as f32;
+    let landmark_x = game.player.x + 1.0;
+    game.world.chunks.clear();
+    game.world.chunks.push(Chunk {
+        index: 0,
+        obstacles: Vec::new(),
+        items: Vec::new(),
+        wind_currents: Vec::new(),
+        landmarks: vec![Landmark::new(landmark_x, ground_y, kind)],
+    });
+    game
+}
+
+#[test]
+fn a_cache_is_not_opened_or_looted_by_running_past() {
+    let ground_y = 19.0;
+    let mut game = state_with_nearby_landmark(LandmarkKind::SecretCache { opened: false });
+    game.world.chunks[0].items.extend([
+        PickupItem::new(
+            game.player.x + 1.0,
+            ground_y - 1.0,
+            ItemKind::AncientCompass,
+        ),
+        PickupItem::new(
+            game.player.x + 3.0,
+            ground_y - 1.0,
+            ItemKind::InductionFilament,
+        ),
+    ]);
+
+    game.update(0.01, None);
+
+    assert!(!game.secret_cache_found);
+    assert!(game.collected_relics.is_empty());
+    assert!(matches!(
+        &game.world.chunks[0].landmarks[0].kind,
+        LandmarkKind::SecretCache { opened: false }
+    ));
+}
+
+#[test]
+fn opening_the_cache_changes_its_visible_state() {
+    let closed = Landmark::new(10.0, 19.0, LandmarkKind::SecretCache { opened: false });
+    let open = Landmark::new(10.0, 19.0, LandmarkKind::SecretCache { opened: true });
+
+    assert_ne!(closed.sprite(), open.sprite());
+}
+
+#[test]
+fn nearby_cache_shows_a_contextual_action_prompt() {
+    let game = state_with_nearby_landmark(LandmarkKind::SecretCache { opened: false });
+
+    assert_eq!(game.current_prompt(), Some("prompt_search_cache"));
+}
+
+#[test]
+fn interaction_works_when_pressed_on_the_first_prompt_frame() {
+    let mut game = state_with_nearby_landmark(LandmarkKind::SecretCache { opened: false });
+    game.world.chunks[0].landmarks[0].rel_x = game.player.x + 12.0;
+
+    assert_eq!(game.current_prompt(), Some("prompt_search_cache"));
+
+    game.update(0.033, Some(PlayerInput::Interact));
+
+    assert!(game.secret_cache_found);
+}
+
+#[test]
+fn interacting_with_the_cache_releases_its_relics() {
+    let mut game = state_with_nearby_landmark(LandmarkKind::SecretCache { opened: false });
+    let ground_y = game.world.ground_y as f32;
+    game.world.chunks[0].items.extend([
+        PickupItem::new(
+            game.player.x + 1.0,
+            ground_y - 1.0,
+            ItemKind::AncientCompass,
+        ),
+        PickupItem::new(
+            game.player.x + 3.0,
+            ground_y - 1.0,
+            ItemKind::InductionFilament,
+        ),
+    ]);
+
+    game.update(0.01, Some(PlayerInput::Interact));
+
+    assert!(game.secret_cache_found);
+    assert!(game.collected_relics.contains(&ItemKind::AncientCompass));
+    assert!(game.collected_relics.contains(&ItemKind::InductionFilament));
+}
+
+#[test]
+fn a_switchhouse_does_not_reconnect_by_running_past() {
+    let mut game = state_with_nearby_landmark(LandmarkKind::RelayNodeConsole { restored: false });
+
+    game.update(0.01, None);
+
+    assert!(!game.relay_restored);
+    assert!(game.relay_activation_timer.is_none());
+}
+
+#[test]
+fn interacting_with_the_switchhouse_reconnects_the_line() {
+    let mut game = state_with_nearby_landmark(LandmarkKind::RelayNodeConsole { restored: false });
+
+    game.update(0.01, Some(PlayerInput::Interact));
+
+    assert!(game.relay_restored);
+    assert!(game.relay_activation_timer.is_some());
+}
+
+#[test]
+fn a_companion_is_not_met_by_running_past() {
+    let mut game = state_with_nearby_landmark(LandmarkKind::CompanionKael { spoken: false });
+
+    game.update(0.01, None);
+
+    assert!(!game.companion_met);
+    assert!(matches!(
+        &game.world.chunks[0].landmarks[0].kind,
+        LandmarkKind::CompanionKael { spoken: false }
+    ));
+}
+
+#[test]
+fn greeting_the_companion_marks_the_encounter_once() {
+    let mut game = state_with_nearby_landmark(LandmarkKind::CompanionKael { spoken: false });
+
+    game.update(0.01, Some(PlayerInput::Interact));
+    game.update(0.01, Some(PlayerInput::Interact));
+
+    assert!(game.companion_met);
+    assert_eq!(game.floating_indicators.len(), 1);
+}
+
+#[test]
+fn interaction_is_not_stored_as_a_movement_action() {
+    let mut buffer = InputBuffer::default();
+
+    buffer.push(PlayerInput::Jump);
+    buffer.push(PlayerInput::Interact);
+
+    assert_eq!(buffer.buffered_input, Some(PlayerInputWrapper::Jump));
+    assert_eq!(buffer.peek(), Some(PlayerInput::Jump));
 }

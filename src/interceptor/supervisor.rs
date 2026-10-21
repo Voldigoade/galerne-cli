@@ -162,6 +162,9 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
                     break;
                 }
                 Event::Key(k) => match k.code {
+                    KeyCode::Char('e') | KeyCode::Char('E') => {
+                        next_input = Some(PlayerInput::Interact);
+                    }
                     KeyCode::Char(' ') | KeyCode::Up | KeyCode::Char('w') | KeyCode::Char('W') => {
                         next_input = Some(PlayerInput::Jump);
                     }
@@ -231,19 +234,15 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
     if game.relay_restored {
         save_state.world_progress.relay_restored = true;
         save_state.refuge.power_restored = true;
-        save_state.companion.kael_at_refuge = true;
     }
     if game.companion_met {
         save_state.companion.met_kael = true;
     }
+    if save_state.world_progress.relay_restored && save_state.companion.met_kael {
+        save_state.companion.kael_at_refuge = true;
+    }
     if game.secret_cache_found {
         save_state.world_progress.secret_cache_found = true;
-        save_state
-            .inventory
-            .add(crate::storage::ItemKind::AncientCompass, 1);
-        save_state
-            .inventory
-            .add(crate::storage::ItemKind::InductionFilament, 1);
     }
     for relic in &game.collected_relics {
         match relic {

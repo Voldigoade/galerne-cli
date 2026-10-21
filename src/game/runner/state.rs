@@ -8,13 +8,16 @@ use super::items::{FloatingIndicator, ItemKind};
 use super::player::{RunnerPlayer, PLAYER_SPRITE_LEFT_OFFSET};
 use super::region::{sector_for_distance, SectorKind};
 use super::wind::{TailwindTier, WindKind};
-use super::world::{ChunkWorld, LandmarkKind, CHUNK_WIDTH};
+use super::world::{Chunk, ChunkWorld, LandmarkKind, CHUNK_WIDTH};
 use crate::terminal::buffer::{Buffer, Color, Style};
 use crate::ui::i18n::{t, Locale};
 
 pub const BASE_FORWARD_SPEED: f32 = 18.0;
 pub const MAX_FORWARD_SPEED: f32 = 36.0;
 pub const SPEED_ACCELERATION_RATE: f32 = 0.15;
+const INTERACTION_RADIUS: f32 = 6.0;
+const INTERACTION_PROMPT_RADIUS: f32 = 12.0;
+const INTERACTION_ACCEPT_RADIUS: f32 = 14.0;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct RunnerSnapshot {
@@ -196,13 +199,54 @@ impl RunnerState {
     }
 
     pub fn current_prompt(&self) -> Option<&'static str> {
-        if !self.onboarding_jump_done && self.distance >= 15.0 && self.distance <= 35.0 {
+        if let Some(prompt) = self.nearby_interaction_prompt() {
+            Some(prompt)
+        } else if !self.onboarding_jump_done && self.distance >= 15.0 && self.distance <= 35.0 {
             Some("jump_prompt")
         } else if !self.onboarding_slide_done && self.distance >= 50.0 && self.distance <= 80.0 {
             Some("slide_prompt")
         } else {
             None
         }
+    }
+
+    fn nearby_interaction_prompt(&self) -> Option<&'static str> {
+        let abs_player_x = self.world.scroll_x + self.player.x;
+        let mut nearest: Option<(f32, &'static str)> = None;
+
+        for chunk in self.world.active_chunks() {
+            let chunk_start_x = (chunk.index * CHUNK_WIDTH) as f32;
+            for landmark in &chunk.landmarks {
+                let abs_x = chunk_start_x + landmark.rel_x;
+                let distance = (abs_player_x - abs_x).abs();
+                if distance > INTERACTION_PROMPT_RADIUS {
+                    continue;
+                }
+
+                let prompt = match &landmark.kind {
+                    LandmarkKind::CompanionKael { spoken } if !spoken && !self.companion_met => {
+                        Some("prompt_greet_companion")
+                    }
+                    LandmarkKind::SecretCache { opened } if !opened && !self.secret_cache_found => {
+                        Some("prompt_search_cache")
+                    }
+                    LandmarkKind::RelayNodeConsole { restored }
+                        if !restored && !self.relay_restored =>
+                    {
+                        Some("prompt_connect_line")
+                    }
+                    _ => None,
+                };
+
+                if let Some(prompt) = prompt {
+                    if nearest.is_none_or(|(best_distance, _)| distance < best_distance) {
+                        nearest = Some((distance, prompt));
+                    }
+                }
+            }
+        }
+
+        nearest.map(|(_, prompt)| prompt)
     }
 
     pub fn update(&mut self, dt: f32, input: Option<PlayerInput>) {
@@ -268,13 +312,14 @@ impl RunnerState {
             self.onboarding_slide_done = true;
         }
 
-        self.update_collisions_and_interactions(dt);
+        self.update_collisions_and_interactions(dt, input);
     }
 
-    fn update_collisions_and_interactions(&mut self, dt: f32) {
+    fn update_collisions_and_interactions(&mut self, dt: f32, input: Option<PlayerInput>) {
         let (p_x1, p_y1, p_x2, p_y2) = self.player.bounding_box();
         let scroll_x = self.world.scroll_x;
         let abs_player_x = scroll_x + self.player.x;
+        let interaction_pressed = input == Some(PlayerInput::Interact);
 
         let mut collected_items = [None; 8];
         let mut collected_count = 0;
@@ -332,7 +377,13 @@ impl RunnerState {
                 let abs_x = chunk_start_x + lm.rel_x;
                 let screen_x = abs_x - scroll_x;
 
-                if (self.player.x - screen_x).abs() < 6.0 {
+                let distance = (self.player.x - screen_x).abs();
+                let within_range = match &lm.kind {
+                    LandmarkKind::CheckpointPylon { .. } => distance < INTERACTION_RADIUS,
+                    _ => interaction_pressed && distance < INTERACTION_ACCEPT_RADIUS,
+                };
+
+                if within_range {
                     match &mut lm.kind {
                         LandmarkKind::CheckpointPylon { id, name_key } => {
                             if !self.unlocked_checkpoints.contains(id) {
@@ -359,40 +410,43 @@ impl RunnerState {
                                 ));
                             }
                         }
-                        LandmarkKind::CompanionKael { spoken } => {
-                            if !*spoken {
-                                *spoken = true;
-                                self.companion_met = true;
-                                self.floating_indicators.push(FloatingIndicator::new(
-                                    self.player.x + 1.0,
-                                    self.player.y - 5.5,
-                                    t("kael_encounter_dialogue", self.locale),
-                                ));
-                            }
+                        LandmarkKind::CompanionKael { spoken }
+                            if interaction_pressed && !*spoken && !self.companion_met =>
+                        {
+                            *spoken = true;
+                            self.companion_met = true;
+                            self.floating_indicators.push(FloatingIndicator::new(
+                                self.player.x + 1.0,
+                                self.player.y - 5.5,
+                                t("kael_encounter_dialogue", self.locale),
+                            ));
                         }
-                        LandmarkKind::SecretCache { opened } => {
-                            if !*opened {
-                                *opened = true;
-                                self.secret_cache_found = true;
-                                self.floating_indicators.push(FloatingIndicator::new(
-                                    self.player.x + 1.0,
-                                    self.player.y - 5.0,
-                                    t("cache_found", self.locale),
-                                ));
-                            }
+                        LandmarkKind::SecretCache { opened }
+                            if interaction_pressed && !*opened && !self.secret_cache_found =>
+                        {
+                            *opened = true;
+                            self.secret_cache_found = true;
+                            self.floating_indicators.push(FloatingIndicator::new(
+                                self.player.x + 1.0,
+                                self.player.y - 5.0,
+                                t("cache_found", self.locale),
+                            ));
                         }
-                        LandmarkKind::RelayNodeConsole { restored } => {
-                            if !*restored {
-                                *restored = true;
-                                self.relay_restored = true;
-                                self.relay_activation_timer = Some(1.5);
-                                self.floating_indicators.push(FloatingIndicator::new(
-                                    self.player.x + 1.0,
-                                    self.player.y - 5.5,
-                                    t("relay_restored", self.locale),
-                                ));
-                            }
+                        LandmarkKind::RelayNodeConsole { restored }
+                            if interaction_pressed && !*restored && !self.relay_restored =>
+                        {
+                            *restored = true;
+                            self.relay_restored = true;
+                            self.relay_activation_timer = Some(1.5);
+                            self.floating_indicators.push(FloatingIndicator::new(
+                                self.player.x + 1.0,
+                                self.player.y - 5.5,
+                                t("relay_restored", self.locale),
+                            ));
                         }
+                        LandmarkKind::CompanionKael { .. }
+                        | LandmarkKind::SecretCache { .. }
+                        | LandmarkKind::RelayNodeConsole { .. } => {}
                     }
                 }
             }
@@ -400,8 +454,17 @@ impl RunnerState {
 
         for chunk in self.world.active_chunks_mut() {
             let chunk_start_x = (chunk.index * CHUNK_WIDTH) as f32;
+            let cache_closed = cache_contents_locked(chunk, self.secret_cache_found);
             for item in &mut chunk.items {
                 if item.collected {
+                    continue;
+                }
+                if cache_closed
+                    && matches!(
+                        item.kind,
+                        ItemKind::AncientCompass | ItemKind::InductionFilament
+                    )
+                {
                     continue;
                 }
                 let item_abs_x = chunk_start_x + item.rel_x;
@@ -661,9 +724,18 @@ impl RunnerState {
 
         for chunk in self.world.active_chunks() {
             let chunk_start_x = (chunk.index * CHUNK_WIDTH) as f32;
+            let cache_closed = cache_contents_locked(chunk, self.secret_cache_found);
 
             for item in &chunk.items {
                 if item.collected {
+                    continue;
+                }
+                if cache_closed
+                    && matches!(
+                        item.kind,
+                        ItemKind::AncientCompass | ItemKind::InductionFilament
+                    )
+                {
                     continue;
                 }
                 let screen_x = (chunk_start_x + item.rel_x) - self.world.scroll_x;
@@ -851,4 +923,12 @@ impl RunnerState {
             );
         }
     }
+}
+
+fn cache_contents_locked(chunk: &Chunk, cache_found: bool) -> bool {
+    !cache_found
+        && chunk
+            .landmarks
+            .iter()
+            .any(|landmark| matches!(&landmark.kind, LandmarkKind::SecretCache { opened: false }))
 }

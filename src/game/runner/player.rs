@@ -145,6 +145,7 @@ impl RunnerPlayer {
                     self.input_buffer.push(PlayerInput::Dash);
                 }
             }
+            PlayerInput::Interact => {}
         }
     }
 

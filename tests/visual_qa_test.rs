@@ -1,7 +1,9 @@
 use galerne::game::runner::action::{ActionState, PlayerInput};
+use galerne::game::runner::items::{ItemKind, PickupItem};
 use galerne::game::runner::parallax::ParallaxEngine;
 use galerne::game::runner::state::RunnerState;
 use galerne::game::runner::wind::TailwindTier;
+use galerne::game::runner::world::{Chunk, Landmark, LandmarkKind};
 use galerne::storage::schema::SaveState;
 use galerne::terminal::buffer::Buffer;
 use galerne::ui::dashboard::render_refuge_panel;
@@ -43,6 +45,81 @@ fn restored_line_resumes_the_suspended_tram() {
         .collect();
     assert_eq!(wheels_in_motion.len(), 2);
     assert_ne!(wheels_at_restored_start, wheels_in_motion);
+}
+
+#[test]
+fn cache_action_prompt_is_rendered_in_each_supported_locale() {
+    let mut game = RunnerState::new(80, 24, 0x8765);
+    let ground_y = game.world.ground_y as f32;
+    game.world.chunks.clear();
+    game.world.chunks.push(Chunk {
+        index: 0,
+        obstacles: Vec::new(),
+        items: Vec::new(),
+        wind_currents: Vec::new(),
+        landmarks: vec![Landmark::new(
+            game.player.x + 1.0,
+            ground_y,
+            LandmarkKind::SecretCache { opened: false },
+        )],
+    });
+
+    for (locale, expected) in [
+        (Locale::En, "E  SEARCH"),
+        (Locale::Fr, "E  CHERCHER"),
+        (Locale::Es, "E  BUSCAR"),
+        (Locale::ZhCn, "E  搜索"),
+    ] {
+        let mut buf = Buffer::new(80, 24);
+        game.render(&mut buf, locale);
+        assert!(
+            buffer_to_string(&buf).contains(expected),
+            "Missing contextual prompt for {locale:?}"
+        );
+    }
+}
+
+#[test]
+fn cache_relics_stay_out_of_sight_until_the_cache_is_opened() {
+    let mut game = RunnerState::new(80, 24, 0x8765);
+    let ground_y = game.world.ground_y as f32;
+    let item_x = game.player.x + 1.0;
+    game.world.chunks.clear();
+    game.world.chunks.push(Chunk {
+        index: 0,
+        obstacles: Vec::new(),
+        items: vec![
+            PickupItem::new(item_x, ground_y - 1.0, ItemKind::AncientCompass),
+            PickupItem::new(item_x + 2.0, ground_y - 1.0, ItemKind::InductionFilament),
+        ],
+        wind_currents: Vec::new(),
+        landmarks: vec![Landmark::new(
+            item_x,
+            ground_y,
+            LandmarkKind::SecretCache { opened: false },
+        )],
+    });
+
+    let mut buf = Buffer::new(80, 24);
+    game.render(&mut buf, Locale::En);
+    let rendered = buffer_to_string(&buf);
+
+    assert!(!rendered.contains("[(*)]"));
+    assert!(!rendered.contains("[~|~]"));
+}
+
+#[test]
+fn restoring_the_line_does_not_invent_a_refuge_companion() {
+    let mut save = SaveState::default();
+    save.world_progress.relay_restored = true;
+    save.refuge.power_restored = true;
+
+    let mut buf = Buffer::new(100, 30);
+    render_refuge_panel(&mut buf, &save, 0, 0, Locale::En);
+    let rendered = buffer_to_string(&buf);
+
+    assert!(rendered.contains("Kael: Roaming the high viaduct"));
+    assert!(!rendered.contains("Kael: Stationed at the observation window"));
 }
 
 #[test]

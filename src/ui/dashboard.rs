@@ -123,7 +123,7 @@ pub fn render_refuge_panel(
     }
 
     let y_info = py + 11;
-    let kael_status = if is_restored || save_state.companion.kael_at_refuge {
+    let kael_status = if save_state.companion.kael_at_refuge {
         t("refuge_kael_present", locale)
     } else if save_state.companion.met_kael {
         t("refuge_companion_met", locale)
@@ -134,8 +134,10 @@ pub fn render_refuge_panel(
         px,
         y_info,
         kael_status,
-        if is_restored {
+        if save_state.companion.kael_at_refuge {
             Color::Yellow
+        } else if save_state.companion.met_kael {
+            Color::Cyan
         } else {
             Color::DarkGrey
         },
@@ -641,23 +643,24 @@ pub fn run_dashboard() -> io::Result<()> {
                 buf.draw_str(px, py + 2, t("help_jump", locale), Color::Cyan, bg);
                 buf.draw_str(px, py + 3, t("help_slide", locale), Color::Cyan, bg);
                 buf.draw_str(px, py + 4, t("help_dash", locale), Color::Cyan, bg);
-                buf.draw_str(px, py + 5, t("help_wind", locale), Color::Cyan, bg);
-                buf.draw_str(px, py + 6, t("help_leave", locale), Color::Cyan, bg);
+                buf.draw_str(px, py + 5, t("help_interact", locale), Color::Cyan, bg);
+                buf.draw_str(px, py + 6, t("help_wind", locale), Color::Cyan, bg);
+                buf.draw_str(px, py + 7, t("help_leave", locale), Color::Cyan, bg);
                 buf.draw_str(
                     px,
-                    py + 8,
+                    py + 9,
                     t("help_tasks_heading", locale),
                     Color::White,
                     bg,
                 );
                 buf.draw_str(
                     px,
-                    py + 9,
+                    py + 10,
                     t("help_activation", locale),
                     Color::DarkGrey,
                     bg,
                 );
-                buf.draw_str(px, py + 10, t("help_continue", locale), Color::DarkGrey, bg);
+                buf.draw_str(px, py + 11, t("help_continue", locale), Color::DarkGrey, bg);
             }
             DashboardTab::Exit => {
                 buf.draw_str_styled(
@@ -1036,19 +1039,15 @@ fn sync_game_to_save_state(
     if game.relay_restored {
         save_state.world_progress.relay_restored = true;
         save_state.refuge.power_restored = true;
-        save_state.companion.kael_at_refuge = true;
     }
     if game.companion_met {
         save_state.companion.met_kael = true;
     }
+    if save_state.world_progress.relay_restored && save_state.companion.met_kael {
+        save_state.companion.kael_at_refuge = true;
+    }
     if game.secret_cache_found {
         save_state.world_progress.secret_cache_found = true;
-        save_state
-            .inventory
-            .add(crate::storage::ItemKind::AncientCompass, 1);
-        save_state
-            .inventory
-            .add(crate::storage::ItemKind::InductionFilament, 1);
     }
     for relic in &game.collected_relics {
         match relic {
@@ -1145,6 +1144,9 @@ pub fn run_manual_game(
                     return Ok(());
                 }
                 Event::Key(k) => match k.code {
+                    KeyCode::Char('e') | KeyCode::Char('E') => {
+                        next_input = Some(PlayerInput::Interact);
+                    }
                     KeyCode::Char(' ') | KeyCode::Up | KeyCode::Char('w') | KeyCode::Char('W') => {
                         next_input = Some(PlayerInput::Jump);
                     }

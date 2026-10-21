@@ -8,6 +8,7 @@ pub enum PlayerInput {
     Jump,
     Slide,
     Dash,
+    Interact,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -77,16 +78,6 @@ pub enum PlayerInputWrapper {
     Dash,
 }
 
-impl From<PlayerInput> for PlayerInputWrapper {
-    fn from(input: PlayerInput) -> Self {
-        match input {
-            PlayerInput::Jump => PlayerInputWrapper::Jump,
-            PlayerInput::Slide => PlayerInputWrapper::Slide,
-            PlayerInput::Dash => PlayerInputWrapper::Dash,
-        }
-    }
-}
-
 impl From<PlayerInputWrapper> for PlayerInput {
     fn from(wrapper: PlayerInputWrapper) -> Self {
         match wrapper {
@@ -101,7 +92,13 @@ impl InputBuffer {
     pub const BUFFER_WINDOW_SECS: f32 = 0.150; // 150ms early press window
 
     pub fn push(&mut self, input: PlayerInput) {
-        self.buffered_input = Some(input.into());
+        let buffered_input = match input {
+            PlayerInput::Jump => PlayerInputWrapper::Jump,
+            PlayerInput::Slide => PlayerInputWrapper::Slide,
+            PlayerInput::Dash => PlayerInputWrapper::Dash,
+            PlayerInput::Interact => return,
+        };
+        self.buffered_input = Some(buffered_input);
         self.buffer_timer = Self::BUFFER_WINDOW_SECS;
     }
 
