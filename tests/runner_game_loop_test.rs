@@ -9,7 +9,6 @@ fn test_runner_state_initialization_and_forward_progression() {
     let mut game = RunnerState::new(80, 24, 0x12345678);
     assert_eq!(game.distance, 0.0);
     assert!(game.speed > 10.0);
-    assert!(!game.is_game_over);
 
     // Simulate 1.0 second of automatic running
     for _ in 0..30 {

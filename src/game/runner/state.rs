@@ -66,7 +66,6 @@ pub struct RunnerState {
     pub floating_indicators: Vec<FloatingIndicator>,
     pub onboarding_jump_done: bool,
     pub onboarding_slide_done: bool,
-    pub is_game_over: bool,
     pub run_duration: f32,
     pub transition_remaining_secs: Option<f32>,
     pub transition_success: bool,
@@ -114,7 +113,6 @@ impl RunnerState {
             floating_indicators: Vec::with_capacity(8),
             onboarding_jump_done: false,
             onboarding_slide_done: false,
-            is_game_over: false,
             run_duration: 0.0,
             transition_remaining_secs: None,
             transition_success: true,
@@ -289,10 +287,6 @@ impl RunnerState {
     }
 
     pub fn update(&mut self, dt: f32, input: Option<PlayerInput>) {
-        if self.is_game_over {
-            return;
-        }
-
         if let Some(ref mut t_rem) = self.transition_remaining_secs {
             *t_rem -= dt;
             self.speed = (self.speed - (self.speed * 8.0 * dt)).max(0.0);

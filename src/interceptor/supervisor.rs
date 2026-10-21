@@ -277,11 +277,7 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
         }
     }
 
-    if game.is_game_over {
-        save_state.active_run = None;
-    } else {
-        save_state.active_run = Some(game.create_snapshot());
-    }
+    save_state.active_run = Some(game.create_snapshot());
 
     if let Err(e) = save_manager.save(&save_state) {
         eprintln!(

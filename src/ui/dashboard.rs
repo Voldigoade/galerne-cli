@@ -1159,11 +1159,7 @@ pub fn run_manual_game(
                 Event::Key(k) if k.code == KeyCode::Esc || k.code == KeyCode::Char('q') => {
                     save_state.total_play_time_secs += start.elapsed().as_secs();
                     sync_game_to_save_state(&game, save_state, initial_shards, initial_dist);
-                    if game.is_game_over {
-                        save_state.active_run = None;
-                    } else {
-                        save_state.active_run = Some(game.create_snapshot());
-                    }
+                    save_state.active_run = Some(game.create_snapshot());
                     if let Err(e) = save_manager.save(save_state) {
                         eprintln!(
                             "[galerne] Warning: Failed to persist career progression: {}",
@@ -1178,9 +1174,7 @@ pub fn run_manual_game(
                 {
                     save_state.total_play_time_secs += start.elapsed().as_secs();
                     sync_game_to_save_state(&game, save_state, initial_shards, initial_dist);
-                    if !game.is_game_over {
-                        save_state.active_run = Some(game.create_snapshot());
-                    }
+                    save_state.active_run = Some(game.create_snapshot());
                     if let Err(e) = save_manager.save(save_state) {
                         eprintln!(
                             "[galerne] Warning: Failed to persist career progression: {}",
@@ -1221,15 +1215,6 @@ pub fn run_manual_game(
 
         game.update(dt, next_input);
         next_input = None;
-
-        if game.is_game_over {
-            save_state.total_play_time_secs += start.elapsed().as_secs();
-            save_state.currency_shards += game.shards_collected.saturating_sub(initial_shards);
-            save_state.total_distance_traveled += (game.distance - initial_dist).max(0.0);
-            save_state.active_run = None;
-            let _ = save_manager.save(save_state);
-            return Ok(());
-        }
 
         if engine.is_too_small() {
             engine.render_too_small_notice(locale);

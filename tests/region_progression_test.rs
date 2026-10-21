@@ -77,16 +77,17 @@ fn test_safe_checkpoint_respawn_preserves_inventory_and_progress() {
     game.player.invulnerable_timer = 0.0;
     game.handle_player_collision();
 
-    assert!(
-        !game.is_game_over,
-        "Death must not result in hard Game Over"
-    );
     assert_eq!(game.distance, checkpoint_dist);
     assert!(matches!(game.player.action, ActionState::Respawning { .. }));
     assert_eq!(game.player.shields, 1);
     assert!(game.player.invulnerable_timer > 0.0);
     assert_eq!(game.shards_collected, saved_shards);
     assert!(game.unlocked_checkpoints.contains(&1));
+
+    for _ in 0..10 {
+        game.update(0.033, None);
+    }
+    assert!(game.distance > checkpoint_dist);
 }
 
 #[test]
