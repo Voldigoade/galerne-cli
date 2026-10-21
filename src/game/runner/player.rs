@@ -16,7 +16,7 @@ pub const GRAVITY_APEX: f32 = 16.0;
 pub const APEX_VELOCITY_THRESHOLD: f32 = 3.5;
 pub const MAX_FALL_SPEED: f32 = 30.0;
 
-pub const SLIDE_DURATION_SECS: f32 = 0.45;
+pub const SLIDE_DURATION_SECS: f32 = 0.9;
 pub const DASH_DURATION_SECS: f32 = 0.22;
 pub const DASH_COOLDOWN_SECS: f32 = 1.0;
 pub const COYOTE_TIME_WINDOW_SECS: f32 = 0.10;

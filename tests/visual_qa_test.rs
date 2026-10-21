@@ -232,6 +232,59 @@ fn next_checkpoint_is_shown_in_each_supported_locale() {
 }
 
 #[test]
+fn canal_gardens_is_the_next_destination_after_the_switch_house() {
+    let mut game = RunnerState::new(120, 30, 0x12345678);
+    game.distance = 1210.0;
+    game.world.scroll_x = 1210.0;
+    game.unlocked_checkpoints.extend([1, 2, 3, 4]);
+
+    for &locale in ALL_LOCALES {
+        let player_x = game.world.scroll_x + game.player.x;
+        let distance = (1570.0 - player_x).ceil() as u32;
+        let expected = format_message(
+            "next_checkpoint",
+            locale,
+            &[
+                ("name", t("cp_canal_gardens", locale).to_owned()),
+                ("distance", distance.to_string()),
+            ],
+        );
+        let mut buf = Buffer::new(120, 30);
+        game.render(&mut buf, locale);
+        assert!(
+            buffer_to_string(&buf).contains(&expected),
+            "canal gardens waypoint should be localized for {locale:?}"
+        );
+    }
+}
+
+#[test]
+fn canal_crossing_shows_the_upper_route_pipe_and_waypoint() {
+    for (width, height) in [(80, 24), (236, 53)] {
+        let mut game = RunnerState::new(width, height, 0x12345678);
+        let route_start = 1365.0;
+        let scroll_x = route_start - game.player.x - 3.5;
+        game.distance = scroll_x;
+        game.world.scroll_x = scroll_x;
+        game.world.parallax.update(scroll_x);
+        game.world.ensure_chunks_generated(1571.0);
+        game.unlocked_checkpoints.extend([1, 2, 3, 4]);
+        game.relay_restored = true;
+
+        let mut buf = Buffer::new(width as u16, height as u16);
+        game.render(&mut buf, Locale::En);
+        let rendered = buffer_to_string(&buf);
+        let walkway_x = (route_start - scroll_x) as u16 + 30;
+        let walkway_y = (game.world.ground_y - 5) as u16;
+
+        println!("--- VISUAL QA: CANAL CROSSING AT {width}x{height} ---\n{rendered}");
+        assert_eq!(buf.get(walkway_x, walkway_y).unwrap().ch, '=');
+        assert!(rendered.contains("[====:]"));
+        assert!(rendered.contains("NEXT STOP: Canal gardens"));
+    }
+}
+
+#[test]
 fn fresh_minimum_sized_game_shows_the_first_destination() {
     let game = RunnerState::new(80, 24, 0x12345678);
     let mut buf = Buffer::new(80, 24);
@@ -551,5 +604,6 @@ fn test_refuge_panel_uses_selected_locale() {
             "refuge status should use locale {:?}",
             locale
         );
+        assert!(rendered.contains("1/6"));
     }
 }

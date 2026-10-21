@@ -9,6 +9,7 @@ use crossterm::event::{Event, KeyCode, KeyModifiers};
 
 use crate::game::rng::FastRng;
 use crate::game::runner::action::PlayerInput;
+use crate::game::runner::world::CHECKPOINTS;
 use crate::game::runner::RunnerState;
 use crate::shell::doctor::collect_diagnostics;
 use crate::storage::manager::SaveManager;
@@ -157,9 +158,10 @@ pub fn render_refuge_panel(
                     .world_progress
                     .checkpoints_unlocked
                     .len()
-                    .min(5)
+                    .min(CHECKPOINTS.len())
                     .to_string(),
             ),
+            ("total", CHECKPOINTS.len().to_string()),
             (
                 "status",
                 t(

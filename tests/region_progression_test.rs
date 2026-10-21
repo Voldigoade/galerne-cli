@@ -195,6 +195,81 @@ fn leaving_the_suspended_span_returns_the_traveler_to_the_lower_track() {
 }
 
 #[test]
+fn upper_canal_route_clears_the_pipe_and_reaches_its_shield() {
+    let mut game = RunnerState::new(80, 24, 0x12345678);
+    let route_start = 1365.0;
+    let scroll_x = route_start - game.player.x - 3.5;
+    game.distance = scroll_x;
+    game.world.scroll_x = scroll_x;
+    game.world.ensure_chunks_generated(route_start + 100.0);
+
+    for frame in 0..200 {
+        game.update(1.0 / 60.0, (frame == 0).then_some(PlayerInput::Jump));
+    }
+
+    assert_eq!(game.player.y, game.world.ground_y as f32 - 5.0);
+    assert_eq!(game.player.shields, 2);
+}
+
+#[test]
+fn lower_canal_route_pipe_hits_an_upright_traveler() {
+    let mut game = RunnerState::new(80, 24, 0x12345678);
+    let route_start = 1365.0;
+    let scroll_x = route_start - game.player.x - 3.5;
+    game.distance = scroll_x;
+    game.world.scroll_x = scroll_x;
+    game.world.ensure_chunks_generated(route_start + 100.0);
+
+    for _ in 0..220 {
+        game.update(1.0 / 60.0, None);
+    }
+
+    assert_eq!(game.player.shields, 0);
+}
+
+#[test]
+fn one_slide_press_clears_the_canal_pipe() {
+    let mut game = RunnerState::new(80, 24, 0x12345678);
+    let route_start = 1365.0;
+    let scroll_x = route_start - game.player.x - 3.5;
+    game.distance = scroll_x;
+    game.world.scroll_x = scroll_x;
+    game.world.ensure_chunks_generated(route_start + 100.0);
+    let mut slide_pressed = false;
+
+    for _ in 0..220 {
+        let player_world_x = game.world.scroll_x + game.player.x + 3.5;
+        let input = if !slide_pressed && player_world_x >= 1410.0 {
+            slide_pressed = true;
+            Some(PlayerInput::Slide)
+        } else {
+            None
+        };
+        game.update(1.0 / 60.0, input);
+    }
+
+    assert!(slide_pressed);
+    assert_eq!(game.player.shields, 1);
+}
+
+#[test]
+fn reaching_the_canal_gardens_activates_its_checkpoint() {
+    let mut game = RunnerState::new(100, 25, 0x12345678);
+
+    for _ in 0..3000 {
+        game.player.invulnerable_timer = 10.0;
+        game.update(0.033, None);
+        if game.unlocked_checkpoints.contains(&5) {
+            break;
+        }
+    }
+
+    assert!(game.unlocked_checkpoints.contains(&5));
+    assert_eq!(game.last_checkpoint_id, 5);
+    assert!(game.last_checkpoint_distance > 1530.0);
+}
+
+#[test]
 fn test_line_restoration_visual_sequence() {
     let mut game = RunnerState::new(120, 30, 0x12345678);
 

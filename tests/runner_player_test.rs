@@ -79,10 +79,9 @@ fn test_slide_duration_and_hitbox_reduction() {
         "Slide must reduce hitbox height to 2 rows"
     );
 
-    // After slide duration (~0.45s), player recovers to Running
-    for _ in 0..20 {
-        player.update(0.033, ground_y);
-    }
+    player.update(0.8, ground_y);
+    assert!(matches!(player.action, ActionState::Sliding { .. }));
+    player.update(0.11, ground_y);
 
     assert!(matches!(player.action, ActionState::Running { .. }));
     assert_eq!(

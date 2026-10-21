@@ -8,12 +8,13 @@ use super::parallax::ParallaxEngine;
 use super::wind::{WindCurrent, WindKind};
 
 pub const CHUNK_WIDTH: usize = 50;
-pub const CHECKPOINTS: [(u32, usize, &str); 5] = [
+pub const CHECKPOINTS: [(u32, usize, &str); 6] = [
     (0, 4, "cp_departure"),
     (1, 260, "cp_shanty_outpost"),
     (2, 512, "cp_shaft_airlock"),
     (3, 885, "cp_high_roost"),
     (4, 1210, "cp_relay_node"),
+    (5, 1570, "cp_canal_gardens"),
 ];
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -369,6 +370,27 @@ impl ChunkWorld {
                     ground_y,
                     LandmarkKind::RelayNodeConsole { restored: false },
                 ));
+            }
+            25 => {
+                wind_currents.push(WindCurrent::new(
+                    20.0,
+                    ground_y,
+                    30.0,
+                    4.0,
+                    WindKind::TailwindGust,
+                ));
+            }
+            26 | 29 | 31 => {}
+            27 => {
+                walkways.push(Walkway::new(15.0, CHUNK_WIDTH as f32, 5.0));
+                items.push(PickupItem::new(36.0, ground_y - 6.0, ItemKind::WindShield));
+            }
+            28 => {
+                walkways.push(Walkway::new(0.0, 35.0, 5.0));
+                obstacles.push(Obstacle::new(15.0, ground_y, ObstacleKind::OverheadPipe));
+            }
+            30 => {
+                items.push(PickupItem::new(28.0, ground_y - 1.0, ItemKind::GaleShard));
             }
             _ => {
                 let mut rng = ChunkRng::new(self.seed, index as u64);

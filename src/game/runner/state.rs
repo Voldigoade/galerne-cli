@@ -993,6 +993,7 @@ fn checkpoint_name(name_key: &str, locale: Locale) -> String {
         "cp_shaft_airlock" => "cp_shaft_airlock",
         "cp_high_roost" => "cp_high_roost",
         "cp_relay_node" => "cp_relay_node",
+        "cp_canal_gardens" => "cp_canal_gardens",
         _ => return name_key.to_owned(),
     };
     t(key, locale).to_owned()
