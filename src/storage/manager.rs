@@ -117,6 +117,35 @@ impl SaveManager {
         }
     }
 
+    /// Creates a pre-migration backup before upgrading to a newer schema version.
+    pub fn create_migration_backup(
+        &self,
+        from_version: u32,
+        to_version: u32,
+    ) -> io::Result<PathBuf> {
+        let save_path = self.primary_save_path();
+        if !save_path.exists() {
+            return Err(Error::new(
+                ErrorKind::NotFound,
+                "No primary save to back up",
+            ));
+        }
+
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+
+        let backup_name = format!(
+            "save.dat.migration_v{}_to_v{}.{}.bak",
+            from_version, to_version, timestamp
+        );
+        let backup_path = self.data_dir.join(&backup_name);
+
+        fs::copy(&save_path, &backup_path)?;
+        Ok(backup_path)
+    }
+
     fn load_file(&self, path: &Path) -> io::Result<SaveState> {
         let bytes = read_file(path)?;
         let (version, payload) = decode_and_verify(&bytes)?;
@@ -129,6 +158,15 @@ impl SaveManager {
                     version, CURRENT_SCHEMA_VERSION
                 ),
             ));
+        }
+
+        if version < CURRENT_SCHEMA_VERSION {
+            // Create automatic pre-migration backup
+            let _ = self.create_migration_backup(version, CURRENT_SCHEMA_VERSION);
+            let migrated =
+                super::migration::migrate_save(version, CURRENT_SCHEMA_VERSION, payload)?;
+            self.save(&migrated)?;
+            return Ok(migrated);
         }
 
         let state: SaveState = serde_json::from_slice(payload)
