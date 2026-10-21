@@ -1,5 +1,5 @@
 use galerne::game::runner::action::PlayerInput;
-use galerne::game::runner::state::RunnerState;
+use galerne::game::runner::state::{RunnerSnapshot, RunnerState};
 use galerne::game::runner::wind::TailwindTier;
 use galerne::terminal::buffer::Buffer;
 use galerne::ui::i18n::{t, Locale, ALL_LOCALES};
@@ -24,6 +24,20 @@ fn test_runner_state_initialization_and_forward_progression() {
         game.world.scroll_x > 0.0,
         "World must scroll as player advances"
     );
+}
+
+#[test]
+fn snapshots_drop_the_unused_score_and_still_read_older_snapshots() {
+    let game = RunnerState::new(80, 24, 0x12345678);
+    let snapshot = game.create_snapshot();
+    let mut encoded = serde_json::to_value(&snapshot).unwrap();
+
+    assert!(encoded.get("score").is_none());
+
+    encoded["score"] = serde_json::json!(900);
+    let old_snapshot: RunnerSnapshot = serde_json::from_value(encoded).unwrap();
+    assert_eq!(old_snapshot.distance, snapshot.distance);
+    assert_eq!(old_snapshot.shards_collected, snapshot.shards_collected);
 }
 
 #[test]

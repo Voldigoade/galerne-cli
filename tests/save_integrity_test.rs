@@ -195,7 +195,7 @@ fn test_active_run_persistence_and_resume() {
     let mut runner = galerne::game::runner::RunnerState::new(80, 24, 0x12345678);
     runner.distance = 125.5;
     runner.speed = 24.0;
-    runner.score = 350;
+    runner.run_duration = 42.0;
     runner.shards_collected = 18;
     runner.player.shields = 2;
 
@@ -216,7 +216,7 @@ fn test_active_run_persistence_and_resume() {
 
     assert_eq!(restored_runner.distance, 125.5);
     assert_eq!(restored_runner.speed, 24.0);
-    assert_eq!(restored_runner.score, 350);
+    assert_eq!(restored_runner.run_duration, 42.0);
     assert_eq!(restored_runner.shards_collected, 18);
     assert_eq!(restored_runner.player.shields, 2);
 }

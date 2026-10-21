@@ -399,7 +399,6 @@ pub fn run_dashboard() -> io::Result<()> {
                         &[
                             ("distance", format!("{:.0}", run.distance)),
                             ("speed", format!("{:.0}", run.speed)),
-                            ("score", run.score.to_string()),
                             ("shards", run.shards_collected.to_string()),
                             ("shields", run.player_shields.to_string()),
                         ],

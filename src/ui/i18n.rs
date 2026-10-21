@@ -407,12 +407,16 @@ fn translate_en(key: &'static str) -> &'static str {
         "cp_canal_gardens" => "Canal gardens",
         "next_checkpoint" => "NEXT STOP: {name} · {distance}m",
         "kael_encounter_dialogue" => "That switchhouse still has power. I'm heading there.",
-        "kael_refuge_dialogue" => "Kael: 'The upper rooms have light again. I will clear the shutters.'",
+        "kael_refuge_dialogue" => {
+            "Kael: 'The upper rooms have light again. I will clear the shutters.'"
+        }
         "refuge_companion_met" => "Kael: seen at the upper overlook",
         "refuge_progress" => "Checkpoints {unlocked}/{total}  |  Line: {status}",
         "line_restored" => "connected",
         "line_dormant" => "quiet",
-        "active_run_summary" => "Distance {distance}m | Speed {speed} | Score {score} | Shards {shards} | Shields {shields}",
+        "active_run_summary" => {
+            "Distance {distance}m | Speed {speed} | Shards {shards} | Shields {shields}"
+        }
         "system_idle" => "Ready when you are",
         "shards_available" => "Shards to spend: {count}",
         "workshop_header" => "{title} — {count} shards",
@@ -496,7 +500,9 @@ fn translate_en(key: &'static str) -> &'static str {
         "doctor_shell_active" => "Active in {count} detected configs",
         "doctor_shell_missing" => "Not installed (`galerne setup` to configure)",
         "doctor_background_none" => "No background service",
-        "doctor_network_update_only" => "Network access is used only by the explicit update command",
+        "doctor_network_update_only" => {
+            "Network access is used only by the explicit update command"
+        }
         "doctor_storage_uncreated" => "Directory not created yet ({path})",
         "doctor_complete" => "System checks complete.",
         "cli_tagline" => "Terminal adventure for developer wait times",
@@ -535,7 +541,9 @@ fn translate_fr(key: &str) -> Option<&'static str> {
         "resume_operation" => "Appuyez sur Entrée pour continuer",
         "active_run_desc" => "Voyage en cours",
         "press_enter_resume" => "Appuyez sur Entrée pour reprendre le voyage",
-        "play_controls_hint" => "Entrée : commencer ou reprendre   Tab : autres panneaux   Échap/q : quitter",
+        "play_controls_hint" => {
+            "Entrée : commencer ou reprendre   Tab : autres panneaux   Échap/q : quitter"
+        }
         "workshop_title" => "ÉTABLI DU REFUGE",
         "workshop_subtitle" => "Réglez votre sac et votre équipement avec les éclats trouvés",
         "base_health" => "Bouclier Cinétique",
@@ -605,7 +613,9 @@ fn translate_fr(key: &str) -> Option<&'static str> {
         "item_induction_filament_name" => "Tresse de cuivre",
         "item_induction_filament_desc" => "Une tresse souple, encore utile pour une réparation.",
         "item_ancient_compass_name" => "Boussole d'arpenteur",
-        "item_ancient_compass_desc" => "Une boussole de terrain marquée de routes absentes des cartes.",
+        "item_ancient_compass_desc" => {
+            "Une boussole de terrain marquée de routes absentes des cartes."
+        }
         "cp_departure" => "Départ du Viaduc",
         "cp_shanty_outpost" => "Maisons du viaduc",
         "cp_shaft_airlock" => "Porte de la cage d'ascenseur",
@@ -614,12 +624,16 @@ fn translate_fr(key: &str) -> Option<&'static str> {
         "cp_canal_gardens" => "Jardins du canal",
         "next_checkpoint" => "HALTE : {name} · {distance} m",
         "kael_encounter_dialogue" => "La maison des aiguillages est encore alimentée. J'y vais.",
-        "kael_refuge_dialogue" => "Kael : 'Les pièces du haut sont éclairées. Je vais dégager les volets.'",
+        "kael_refuge_dialogue" => {
+            "Kael : 'Les pièces du haut sont éclairées. Je vais dégager les volets.'"
+        }
         "refuge_companion_met" => "Kael : aperçu au belvédère supérieur",
         "refuge_progress" => "Haltes {unlocked}/{total}  |  Ligne : {status}",
         "line_restored" => "reliée",
         "line_dormant" => "calme",
-        "active_run_summary" => "Distance {distance}m | Vitesse {speed} | Score {score} | Éclats {shards} | Boucliers {shields}",
+        "active_run_summary" => {
+            "Distance {distance}m | Vitesse {speed} | Éclats {shards} | Boucliers {shields}"
+        }
         "system_idle" => "Prêt quand vous l'êtes",
         "shards_available" => "Éclats disponibles : {count}",
         "workshop_header" => "{title} — {count} éclats",
@@ -652,7 +666,9 @@ fn translate_fr(key: &str) -> Option<&'static str> {
         "help_activation" => "Galerne attend un peu avant de s'ouvrir pour les longues attentes.",
         "help_continue" => "Après votre départ, la tâche continue et sa sortie réapparaît.",
         "terminal_too_small" => "TERMINAL TROP PETIT",
-        "terminal_size_required" => "Actuel : {width}x{height} — minimum : {min_width}x{min_height}",
+        "terminal_size_required" => {
+            "Actuel : {width}x{height} — minimum : {min_width}x{min_height}"
+        }
         "terminal_expand_window" => "Agrandissez la fenêtre du terminal.",
         "completion_success" => "TÂCHE TERMINÉE",
         "completion_failure" => "TÂCHE ÉCHOUÉE",
@@ -703,7 +719,9 @@ fn translate_fr(key: &str) -> Option<&'static str> {
         "doctor_shell_active" => "Active dans {count} configurations détectées",
         "doctor_shell_missing" => "Non installé (`galerne setup` pour configurer)",
         "doctor_background_none" => "Aucun service en arrière-plan",
-        "doctor_network_update_only" => "Le réseau est utilisé uniquement par la commande de mise à jour explicite",
+        "doctor_network_update_only" => {
+            "Le réseau est utilisé uniquement par la commande de mise à jour explicite"
+        }
         "doctor_storage_uncreated" => "Répertoire pas encore créé ({path})",
         "doctor_complete" => "Contrôles du système terminés.",
         "cli_tagline" => "Aventure dans le terminal pendant les temps d'attente des développeurs",
@@ -810,9 +828,13 @@ fn translate_es(key: &str) -> Option<&'static str> {
         "item_resonance_core_name" => "Bobina del relé",
         "item_resonance_core_desc" => "Una bobina pesada sacada del antiguo cuadro eléctrico.",
         "item_induction_filament_name" => "Trenza de cobre",
-        "item_induction_filament_desc" => "Trenza flexible de cobre, todavía útil para reparar algo.",
+        "item_induction_filament_desc" => {
+            "Trenza flexible de cobre, todavía útil para reparar algo."
+        }
         "item_ancient_compass_name" => "Brújula de campo",
-        "item_ancient_compass_desc" => "Una brújula marcada con rutas que ya no aparecen en los mapas.",
+        "item_ancient_compass_desc" => {
+            "Una brújula marcada con rutas que ya no aparecen en los mapas."
+        }
         "cp_departure" => "Salida del Viaducto",
         "cp_shanty_outpost" => "Casas del viaducto",
         "cp_shaft_airlock" => "Puerta del hueco del ascensor",
@@ -821,12 +843,16 @@ fn translate_es(key: &str) -> Option<&'static str> {
         "cp_canal_gardens" => "Jardines del canal",
         "next_checkpoint" => "PARADA: {name} · {distance} m",
         "kael_encounter_dialogue" => "La casa de cambios aún tiene corriente. Voy para allá.",
-        "kael_refuge_dialogue" => "Kael: 'Las habitaciones de arriba vuelven a tener luz. Limpiaré las contraventanas.'",
+        "kael_refuge_dialogue" => {
+            "Kael: 'Las habitaciones de arriba vuelven a tener luz. Limpiaré las contraventanas.'"
+        }
         "refuge_companion_met" => "Kael: visto en el mirador superior",
         "refuge_progress" => "Paradas {unlocked}/{total}  |  Línea: {status}",
         "line_restored" => "conectada",
         "line_dormant" => "tranquila",
-        "active_run_summary" => "Distancia {distance}m | Velocidad {speed} | Puntos {score} | Fragmentos {shards} | Escudos {shields}",
+        "active_run_summary" => {
+            "Distancia {distance}m | Velocidad {speed} | Fragmentos {shards} | Escudos {shields}"
+        }
         "system_idle" => "Listo cuando quieras",
         "shards_available" => "Fragmentos disponibles: {count}",
         "workshop_header" => "{title} — {count} fragmentos",
@@ -910,7 +936,9 @@ fn translate_es(key: &str) -> Option<&'static str> {
         "doctor_shell_active" => "Activo en {count} configuraciones detectadas",
         "doctor_shell_missing" => "No instalado (`galerne setup` para configurar)",
         "doctor_background_none" => "No hay servicio en segundo plano",
-        "doctor_network_update_only" => "La red solo se usa con el comando explícito de actualización",
+        "doctor_network_update_only" => {
+            "La red solo se usa con el comando explícito de actualización"
+        }
         "doctor_storage_uncreated" => "Directorio aún no creado ({path})",
         "doctor_complete" => "Comprobaciones del sistema completadas.",
         "cli_tagline" => "Aventura de terminal para los tiempos de espera de desarrollo",
@@ -1033,9 +1061,7 @@ fn translate_zh(key: &str) -> Option<&'static str> {
         "refuge_progress" => "歇脚处 {unlocked}/{total}  |  线路：{status}",
         "line_restored" => "已接通",
         "line_dormant" => "安静",
-        "active_run_summary" => {
-            "距离 {distance}米 | 速度 {speed} | 得分 {score} | 碎片 {shards} | 护盾 {shields}"
-        }
+        "active_run_summary" => "距离 {distance}米 | 速度 {speed} | 碎片 {shards} | 护盾 {shields}",
         "system_idle" => "准备好了就出发",
         "shards_available" => "可用碎片：{count}",
         "workshop_header" => "{title} — {count} 碎片",

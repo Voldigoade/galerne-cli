@@ -1,6 +1,6 @@
 use galerne::storage::schema::SaveState;
 use galerne::storage::stats::format_career_stats;
-use galerne::ui::i18n::{has_translation, t, Locale, ALL_KEYS, ALL_LOCALES};
+use galerne::ui::i18n::{format_message, has_translation, t, Locale, ALL_KEYS, ALL_LOCALES};
 
 #[test]
 fn test_locale_from_code_and_as_code() {
@@ -63,6 +63,29 @@ fn test_career_stats_use_selected_locale() {
     assert!(!french.contains("Total Game Time"));
     assert!(!spanish.contains("Total Game Time"));
     assert!(!chinese.contains("Total Game Time"));
+}
+
+#[test]
+fn active_run_summary_reports_traversal_state_without_survivor_score() {
+    for &locale in ALL_LOCALES {
+        let summary = format_message(
+            "active_run_summary",
+            locale,
+            &[
+                ("distance", "120".to_owned()),
+                ("speed", "18".to_owned()),
+                ("shards", "4".to_owned()),
+                ("shields", "1".to_owned()),
+            ],
+        );
+
+        assert!(!summary.contains("{score}"));
+        assert!(!summary.contains("Score"));
+        assert!(!summary.contains("Puntos"));
+        assert!(!summary.contains("得分"));
+        assert!(summary.contains("120"));
+        assert!(summary.contains("4"));
+    }
 }
 
 #[test]

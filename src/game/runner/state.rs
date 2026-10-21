@@ -28,7 +28,6 @@ const FLOW_MAX_STEPS: u8 = 4;
 pub struct RunnerSnapshot {
     pub distance: f32,
     pub speed: f32,
-    pub score: u32,
     pub shards_collected: u32,
     pub player_y: f32,
     pub player_action: ActionState,
@@ -59,7 +58,6 @@ pub struct RunnerState {
     pub world: ChunkWorld,
     pub speed: f32,
     pub distance: f32,
-    pub score: u32,
     pub shards_collected: u32,
     pub flow_multiplier: f32,
     pub workshop_shard_multiplier: f32,
@@ -108,7 +106,6 @@ impl RunnerState {
             world: ChunkWorld::new(seed, viewport_width, viewport_height),
             speed: BASE_FORWARD_SPEED,
             distance: 0.0,
-            score: 0,
             shards_collected: 0,
             flow_multiplier: 1.0,
             workshop_shard_multiplier: 1.0,
@@ -165,7 +162,6 @@ impl RunnerState {
         RunnerSnapshot {
             distance: self.distance,
             speed: self.speed,
-            score: self.score,
             shards_collected: self.shards_collected,
             player_y: self.player.y,
             player_action: self.player.action,
@@ -188,7 +184,6 @@ impl RunnerState {
     pub fn resume_snapshot(&mut self, snap: &RunnerSnapshot) {
         self.distance = snap.distance;
         self.speed = snap.speed;
-        self.score = snap.score;
         self.shards_collected = snap.shards_collected;
         self.player.y = snap.player_y;
         self.player.action = snap.player_action;
@@ -622,7 +617,6 @@ impl RunnerState {
                 let multiplier = self.workshop_shard_multiplier + self.flow_multiplier - 1.0;
                 let gain = (10.0 * multiplier) as u32;
                 self.shards_collected += gain;
-                self.score += gain * 5;
             }
             ItemKind::SpeedSurge => {
                 self.active_surge_timer = 5.0;
