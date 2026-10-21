@@ -137,6 +137,12 @@ fn main() {
                 process::exit(1);
             }
         }
+        CliAction::Update { check_only } => {
+            if let Err(e) = galerne::updater::run_update(check_only) {
+                eprintln!("\nUpdate failed: {}", e);
+                process::exit(1);
+            }
+        }
         CliAction::Wrap(cmd) => match execute_wrapped_task(&cmd) {
             Ok(exit_code) => {
                 process::exit(exit_code);

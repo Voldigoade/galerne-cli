@@ -64,6 +64,26 @@ fn test_cli_argument_parsing() {
         CliAction::Uninstall
     );
     assert_eq!(
+        parse_cli_action(&["galerne".to_string(), "update".to_string()]),
+        CliAction::Update { check_only: false }
+    );
+    assert_eq!(
+        parse_cli_action(&[
+            "galerne".to_string(),
+            "update".to_string(),
+            "--check".to_string()
+        ]),
+        CliAction::Update { check_only: true }
+    );
+    assert_eq!(
+        parse_cli_action(&[
+            "galerne".to_string(),
+            "update".to_string(),
+            "-c".to_string()
+        ]),
+        CliAction::Update { check_only: true }
+    );
+    assert_eq!(
         parse_cli_action(&["galerne".to_string(), "help".to_string()]),
         CliAction::Help
     );

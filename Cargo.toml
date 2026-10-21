@@ -9,6 +9,7 @@ readme = "README.md"
 repository = "https://github.com/Voldigoade/galerne"
 keywords = ["terminal", "game", "cli", "tui", "developer-tools"]
 categories = ["command-line-utilities", "games"]
+default-run = "galerne"
 
 [dependencies]
 crossterm = { version = "0.28", default-features = false, features = ["bracketed-paste", "events", "windows"] }

@@ -15,6 +15,7 @@ pub enum CliAction {
     Disable,
     Uninstall,
     Wrap(Vec<String>),
+    Update { check_only: bool },
     Help,
     Version,
 }
@@ -49,6 +50,10 @@ pub fn parse_cli_action(args: &[String]) -> CliAction {
         "enable" => CliAction::Enable,
         "disable" => CliAction::Disable,
         "uninstall" => CliAction::Uninstall,
+        "update" => {
+            let check_only = args.iter().skip(2).any(|a| a == "--check" || a == "-c");
+            CliAction::Update { check_only }
+        }
         "wrap" => {
             if args.len() > 2 {
                 CliAction::Wrap(args[2..].to_vec())
@@ -85,6 +90,8 @@ pub fn print_help() {
           galerne enable              Enable automatic wait-time game activation\n  \
           galerne disable             Disable automatic game activation\n  \
           galerne uninstall           Safely remove shell hooks and application state\n  \
+          galerne update              Check for and safely install the latest release\n  \
+          galerne update --check      Check release availability without modifying installation\n  \
           galerne wrap <command...>   Explicitly execute and supervise a development command\n  \
           galerne help                Display this help overview\n",
         crate::VERSION
