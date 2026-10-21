@@ -47,7 +47,7 @@ Transform Galerne from a generic runner prototype into a terminal-native side-sc
 - Flow multiplier system: reward clean vaults and glides with subtle visual audio-visual resonance.
 
 ### Phase E: Inventory, Discoveries & Companion Malo
-- Item catalog: *Resonance Core*, *Induction Filament*, *Ancient Compass*, *Gale Shards*.
+- Item catalog: *Relay Coil*, *Copper Braid*, *Survey Compass*, *Gale Shards*.
 - Malo tends the lamps along the upper walk. His authored sprite and short localized lines reflect that work; he returns to the refuge when the Line is restored.
 - Discovery: hidden maintenance chamber with ancient relic.
 
