@@ -15,6 +15,8 @@ crossterm = { version = "0.28", default-features = false, features = ["bracketed
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 crc32fast = "1.4"
+ureq = { version = "3.4", default-features = false, features = ["rustls"] }
+sha2 = { version = "0.10", default-features = false }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

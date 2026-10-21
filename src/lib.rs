@@ -6,6 +6,7 @@ pub mod shell;
 pub mod storage;
 pub mod terminal;
 pub mod ui;
+pub mod updater;
 
 /// Application version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
