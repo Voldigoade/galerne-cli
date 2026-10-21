@@ -24,6 +24,8 @@ use crate::ui::i18n::{t, Locale};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum DashboardTab {
     Play,
+    Refuge,
+    Inventory,
     Workshop,
     Stats,
     Saves,
@@ -34,8 +36,10 @@ enum DashboardTab {
 }
 
 impl DashboardTab {
-    const ALL: [DashboardTab; 8] = [
+    const ALL: [DashboardTab; 10] = [
         DashboardTab::Play,
+        DashboardTab::Refuge,
+        DashboardTab::Inventory,
         DashboardTab::Workshop,
         DashboardTab::Stats,
         DashboardTab::Saves,
@@ -48,6 +52,8 @@ impl DashboardTab {
     fn label(&self, locale: Locale) -> &'static str {
         match self {
             DashboardTab::Play => t("menu_play", locale),
+            DashboardTab::Refuge => t("menu_refuge", locale),
+            DashboardTab::Inventory => t("menu_inventory", locale),
             DashboardTab::Workshop => t("menu_workshop", locale),
             DashboardTab::Stats => t("menu_stats", locale),
             DashboardTab::Saves => t("menu_saves", locale),
@@ -209,6 +215,153 @@ pub fn run_dashboard() -> io::Result<()> {
                         &shards_str,
                         Style::new(Color::Cyan, bg).bold(),
                     );
+                }
+            }
+            DashboardTab::Refuge => {
+                let is_restored = save_state.world_progress.relay_restored;
+                let header = if is_restored {
+                    t("refuge_restored_status", locale)
+                } else {
+                    t("refuge_dormant_status", locale)
+                };
+                let status_color = if is_restored {
+                    Color::Cyan
+                } else {
+                    Color::DarkYellow
+                };
+                buf.draw_str_styled(px, py, header, Style::new(status_color, bg).bold());
+
+                let gantry_ascii = if is_restored {
+                    &[
+                        "       .---------------------------------------.       ",
+                        "      /  [*]   POWERED VIADUCT GANTRY     [*]  \\      ",
+                        "     /===========================================\\     ",
+                        "     |  __      [WORKBENCH]       ____      ,(^) |     ",
+                        "     | |##|    .-----------.     |====|    <{#}>~|     ",
+                        "     | |##|    | * * * * * |     |====|     / \\  |     ",
+                        "    ===============================================    ",
+                        "       |  ONLINE - LINE 04 HUMMING - KAEL PRESENT |    ",
+                    ]
+                } else {
+                    &[
+                        "       .---------------------------------------.       ",
+                        "      /  [ ]   ABANDONED VIADUCT GANTRY   [ ]  \\      ",
+                        "     /===========================================\\     ",
+                        "     |  __      [WORKBENCH]       ____       [ ] |     ",
+                        "     | |  |    .-----------.     |####|     .---.|     ",
+                        "     | |__|    | _ _ _ _ _ |     |####|     |   ||     ",
+                        "    ===============================================    ",
+                        "       |       DORMANT - POWER OFFLINE       |         ",
+                    ]
+                };
+
+                for (idx, line) in gantry_ascii.iter().enumerate() {
+                    let style = if is_restored
+                        && (line.contains("[*]") || line.contains("##") || line.contains("===="))
+                    {
+                        Style::new(Color::Cyan, bg).bold()
+                    } else {
+                        Style::new(Color::White, bg)
+                    };
+                    buf.draw_str_styled(px, py + 2 + idx as u16, line, style);
+                }
+
+                let y_info = py + 11;
+                let kael_status = if is_restored || save_state.companion.kael_at_refuge {
+                    t("refuge_kael_present", locale)
+                } else if save_state.companion.met_kael {
+                    "Kael: Encountered at High Roost"
+                } else {
+                    t("refuge_kael_absent", locale)
+                };
+                buf.draw_str(
+                    px,
+                    y_info,
+                    kael_status,
+                    if is_restored {
+                        Color::Yellow
+                    } else {
+                        Color::DarkGrey
+                    },
+                    bg,
+                );
+
+                let workbench_status = t("refuge_workbench_status", locale);
+                buf.draw_str(px, y_info + 1, workbench_status, Color::White, bg);
+
+                let progress_summary = format!(
+                    "Region Progress: Checkpoints Unlocked {}/5  |  Line Status: {}",
+                    save_state.world_progress.checkpoints_unlocked.len().min(5),
+                    if is_restored { "RESTORED" } else { "OFFLINE" }
+                );
+                buf.draw_str_styled(
+                    px,
+                    y_info + 3,
+                    &progress_summary,
+                    Style::new(Color::Cyan, bg).bold(),
+                );
+
+                if is_restored && save_state.companion.kael_at_refuge {
+                    buf.draw_str_styled(
+                        px,
+                        y_info + 5,
+                        t("kael_refuge_dialogue", locale),
+                        Style::new(Color::Yellow, bg).bold(),
+                    );
+                }
+            }
+            DashboardTab::Inventory => {
+                buf.draw_str_styled(
+                    px,
+                    py,
+                    t("inventory_title", locale),
+                    Style::new(Color::Yellow, bg).bold(),
+                );
+
+                let inv = &save_state.inventory;
+                let shards_count = inv
+                    .count(crate::storage::ItemKind::GaleShard)
+                    .max(save_state.currency_shards);
+                let core_count = inv.count(crate::storage::ItemKind::ResonanceCore);
+                let filament_count = inv.count(crate::storage::ItemKind::InductionFilament);
+                let compass_count = inv.count(crate::storage::ItemKind::AncientCompass);
+
+                let items = [
+                    (
+                        t("item_gale_shard_name", locale),
+                        shards_count,
+                        t("item_gale_shard_desc", locale),
+                        Color::Yellow,
+                        "[*]",
+                    ),
+                    (
+                        t("item_resonance_core_name", locale),
+                        core_count,
+                        t("item_resonance_core_desc", locale),
+                        Color::Cyan,
+                        "[<#>]",
+                    ),
+                    (
+                        t("item_induction_filament_name", locale),
+                        filament_count,
+                        t("item_induction_filament_desc", locale),
+                        Color::White,
+                        "[~|~]",
+                    ),
+                    (
+                        t("item_ancient_compass_name", locale),
+                        compass_count,
+                        t("item_ancient_compass_desc", locale),
+                        Color::Magenta,
+                        "[(*)]",
+                    ),
+                ];
+
+                for (idx, (name, count, desc, color, glyph)) in items.iter().enumerate() {
+                    let y = py + 2 + (idx as u16 * 3);
+                    let title = format!("{} {}  x{:02}", glyph, name, count);
+                    buf.draw_str_styled(px, y, &title, Style::new(*color, bg).bold());
+                    buf.draw_str(px + 4, y + 1, desc, Color::DarkGrey, bg);
                 }
             }
             DashboardTab::Workshop => {
@@ -809,6 +962,69 @@ pub fn run_direct_play() -> io::Result<()> {
 }
 
 /// Runs a standalone manual play session from the dashboard or direct CLI invocation.
+fn sync_game_to_save_state(
+    game: &RunnerState,
+    save_state: &mut crate::storage::schema::SaveState,
+    initial_shards: u32,
+    initial_dist: f32,
+) {
+    let shards_gained = game.shards_collected.saturating_sub(initial_shards);
+    save_state.currency_shards += shards_gained;
+    if shards_gained > 0 {
+        save_state
+            .inventory
+            .add(crate::storage::ItemKind::GaleShard, shards_gained);
+    }
+    save_state.total_distance_traveled += (game.distance - initial_dist).max(0.0);
+
+    if game.relay_restored {
+        save_state.world_progress.relay_restored = true;
+        save_state.refuge.power_restored = true;
+        save_state.companion.kael_at_refuge = true;
+    }
+    if game.companion_met {
+        save_state.companion.met_kael = true;
+    }
+    if game.secret_cache_found {
+        save_state.world_progress.secret_cache_found = true;
+        save_state
+            .inventory
+            .add(crate::storage::ItemKind::AncientCompass, 1);
+        save_state
+            .inventory
+            .add(crate::storage::ItemKind::InductionFilament, 1);
+    }
+    for relic in &game.collected_relics {
+        match relic {
+            crate::game::runner::items::ItemKind::ResonanceCore => {
+                save_state
+                    .inventory
+                    .add(crate::storage::ItemKind::ResonanceCore, 1);
+            }
+            crate::game::runner::items::ItemKind::InductionFilament => {
+                save_state
+                    .inventory
+                    .add(crate::storage::ItemKind::InductionFilament, 1);
+            }
+            crate::game::runner::items::ItemKind::AncientCompass => {
+                save_state
+                    .inventory
+                    .add(crate::storage::ItemKind::AncientCompass, 1);
+            }
+            _ => {}
+        }
+    }
+    for cp_id in &game.unlocked_checkpoints {
+        if !save_state
+            .world_progress
+            .checkpoints_unlocked
+            .contains(cp_id)
+        {
+            save_state.world_progress.checkpoints_unlocked.push(*cp_id);
+        }
+    }
+}
+
 pub fn run_manual_game(
     engine: &mut Engine,
     save_manager: &SaveManager,
@@ -841,9 +1057,7 @@ pub fn run_manual_game(
                 Event::Key(k) if k.code == KeyCode::Esc || k.code == KeyCode::Char('q') => {
                     // Save and exit back to menu
                     save_state.total_play_time_secs += start.elapsed().as_secs();
-                    save_state.currency_shards +=
-                        game.shards_collected.saturating_sub(initial_shards);
-                    save_state.total_distance_traveled += (game.distance - initial_dist).max(0.0);
+                    sync_game_to_save_state(&game, save_state, initial_shards, initial_dist);
                     if game.is_game_over {
                         save_state.active_run = None;
                     } else {
@@ -862,9 +1076,7 @@ pub fn run_manual_game(
                         && k.code == KeyCode::Char('c') =>
                 {
                     save_state.total_play_time_secs += start.elapsed().as_secs();
-                    save_state.currency_shards +=
-                        game.shards_collected.saturating_sub(initial_shards);
-                    save_state.total_distance_traveled += (game.distance - initial_dist).max(0.0);
+                    sync_game_to_save_state(&game, save_state, initial_shards, initial_dist);
                     if !game.is_game_over {
                         save_state.active_run = Some(game.create_snapshot());
                     }

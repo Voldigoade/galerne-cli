@@ -124,6 +124,11 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
         engine.height() as usize,
         rand_seed(),
     );
+    let predicted_secs = history
+        .median_duration(&project_id, matched_class)
+        .unwrap_or(0.0);
+    game.tailwind_tier =
+        crate::game::runner::wind::TailwindTier::from_predicted_duration(predicted_secs);
     apply_workshop_to_runner(&save_state.workshop, &mut game);
 
     // If an active run snapshot exists, resume it with exact deterministic state
@@ -231,6 +236,57 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
     }
     save_state.total_distance_traveled += dist_gained;
     save_state.currency_shards += shards_gained;
+    if shards_gained > 0 {
+        save_state
+            .inventory
+            .add(crate::storage::ItemKind::GaleShard, shards_gained);
+    }
+    if game.relay_restored {
+        save_state.world_progress.relay_restored = true;
+        save_state.refuge.power_restored = true;
+        save_state.companion.kael_at_refuge = true;
+    }
+    if game.companion_met {
+        save_state.companion.met_kael = true;
+    }
+    if game.secret_cache_found {
+        save_state.world_progress.secret_cache_found = true;
+        save_state
+            .inventory
+            .add(crate::storage::ItemKind::AncientCompass, 1);
+        save_state
+            .inventory
+            .add(crate::storage::ItemKind::InductionFilament, 1);
+    }
+    for relic in &game.collected_relics {
+        match relic {
+            crate::game::runner::items::ItemKind::ResonanceCore => {
+                save_state
+                    .inventory
+                    .add(crate::storage::ItemKind::ResonanceCore, 1);
+            }
+            crate::game::runner::items::ItemKind::InductionFilament => {
+                save_state
+                    .inventory
+                    .add(crate::storage::ItemKind::InductionFilament, 1);
+            }
+            crate::game::runner::items::ItemKind::AncientCompass => {
+                save_state
+                    .inventory
+                    .add(crate::storage::ItemKind::AncientCompass, 1);
+            }
+            _ => {}
+        }
+    }
+    for cp_id in &game.unlocked_checkpoints {
+        if !save_state
+            .world_progress
+            .checkpoints_unlocked
+            .contains(cp_id)
+        {
+            save_state.world_progress.checkpoints_unlocked.push(*cp_id);
+        }
+    }
 
     if game.is_game_over {
         save_state.active_run = None;
