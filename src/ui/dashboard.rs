@@ -6,6 +6,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use crossterm::event::{Event, KeyCode, KeyModifiers};
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::game::rng::FastRng;
 use crate::game::runner::action::PlayerInput;
@@ -277,6 +278,113 @@ pub fn render_workshop_panel(
     buf.draw_str(px, py + 13, t("workshop_help", locale), Color::DarkGrey, bg);
 }
 
+pub fn render_inventory_panel(
+    buf: &mut crate::terminal::buffer::Buffer,
+    save_state: &crate::storage::schema::SaveState,
+    px: u16,
+    py: u16,
+    locale: Locale,
+) {
+    let bg = Color::Reset;
+    let compact = buf.width() < 80 || buf.height() < 24;
+    let row_height = if compact { 2 } else { 4 };
+    buf.draw_str_styled(
+        px,
+        py,
+        t(
+            if compact {
+                "menu_inventory"
+            } else {
+                "inventory_title"
+            },
+            locale,
+        ),
+        Style::new(Color::Yellow, bg).bold(),
+    );
+
+    let inventory = &save_state.inventory;
+    let items = [
+        (
+            crate::storage::ItemKind::GaleShard,
+            inventory
+                .count(crate::storage::ItemKind::GaleShard)
+                .max(save_state.currency_shards),
+            Color::Yellow,
+            "[*]",
+        ),
+        (
+            crate::storage::ItemKind::ResonanceCore,
+            inventory.count(crate::storage::ItemKind::ResonanceCore),
+            Color::Cyan,
+            "[<#>]",
+        ),
+        (
+            crate::storage::ItemKind::InductionFilament,
+            inventory.count(crate::storage::ItemKind::InductionFilament),
+            Color::White,
+            "[~|~]",
+        ),
+        (
+            crate::storage::ItemKind::AncientCompass,
+            inventory.count(crate::storage::ItemKind::AncientCompass),
+            Color::Magenta,
+            "[(*)]",
+        ),
+    ];
+
+    for (idx, (item, count, color, glyph)) in items.iter().enumerate() {
+        let y = py + 2 + (idx as u16 * row_height);
+        let title = format!("{} {}  x{:02}", glyph, t(item.name_key(), locale), count);
+        buf.draw_str_styled(px, y, &title, Style::new(*color, bg).bold());
+        if !compact {
+            let line_width = (buf.width().saturating_sub(px + 4 + 1)) as usize;
+            for (line_idx, line) in wrap_text(t(item.desc_key(), locale), line_width, 2)
+                .iter()
+                .enumerate()
+            {
+                buf.draw_str(px + 4, y + 1 + line_idx as u16, line, Color::DarkGrey, bg);
+            }
+        }
+    }
+}
+
+fn wrap_text(text: &str, line_width: usize, line_limit: usize) -> Vec<String> {
+    let mut lines = vec![String::new()];
+    for word in text.split_whitespace() {
+        let current_width = UnicodeWidthStr::width(lines.last().unwrap().as_str());
+        let word_width = UnicodeWidthStr::width(word);
+        let separator_width = usize::from(current_width > 0);
+        if current_width + separator_width + word_width > line_width && current_width > 0 {
+            if lines.len() == line_limit {
+                break;
+            }
+            lines.push(String::new());
+        }
+
+        if word_width <= line_width {
+            let line = lines.last_mut().unwrap();
+            if !line.is_empty() {
+                line.push(' ');
+            }
+            line.push_str(word);
+            continue;
+        }
+
+        for ch in word.chars() {
+            let char_width = UnicodeWidthChar::width(ch).unwrap_or(0);
+            let current_width = UnicodeWidthStr::width(lines.last().unwrap().as_str());
+            if current_width + char_width > line_width {
+                if lines.len() == line_limit {
+                    break;
+                }
+                lines.push(String::new());
+            }
+            lines.last_mut().unwrap().push(ch);
+        }
+    }
+    lines
+}
+
 /// Runs the interactive terminal home dashboard.
 pub fn run_dashboard() -> io::Result<()> {
     let _guard = TerminalGuard::enter()?;
@@ -437,58 +545,7 @@ pub fn run_dashboard() -> io::Result<()> {
                 render_refuge_panel(buf, &save_state, px, py, locale);
             }
             DashboardTab::Inventory => {
-                buf.draw_str_styled(
-                    px,
-                    py,
-                    t("inventory_title", locale),
-                    Style::new(Color::Yellow, bg).bold(),
-                );
-
-                let inv = &save_state.inventory;
-                let shards_count = inv
-                    .count(crate::storage::ItemKind::GaleShard)
-                    .max(save_state.currency_shards);
-                let core_count = inv.count(crate::storage::ItemKind::ResonanceCore);
-                let filament_count = inv.count(crate::storage::ItemKind::InductionFilament);
-                let compass_count = inv.count(crate::storage::ItemKind::AncientCompass);
-
-                let items = [
-                    (
-                        t("item_gale_shard_name", locale),
-                        shards_count,
-                        t("item_gale_shard_desc", locale),
-                        Color::Yellow,
-                        "[*]",
-                    ),
-                    (
-                        t("item_resonance_core_name", locale),
-                        core_count,
-                        t("item_resonance_core_desc", locale),
-                        Color::Cyan,
-                        "[<#>]",
-                    ),
-                    (
-                        t("item_induction_filament_name", locale),
-                        filament_count,
-                        t("item_induction_filament_desc", locale),
-                        Color::White,
-                        "[~|~]",
-                    ),
-                    (
-                        t("item_ancient_compass_name", locale),
-                        compass_count,
-                        t("item_ancient_compass_desc", locale),
-                        Color::Magenta,
-                        "[(*)]",
-                    ),
-                ];
-
-                for (idx, (name, count, desc, color, glyph)) in items.iter().enumerate() {
-                    let y = py + 2 + (idx as u16 * 3);
-                    let title = format!("{} {}  x{:02}", glyph, name, count);
-                    buf.draw_str_styled(px, y, &title, Style::new(*color, bg).bold());
-                    buf.draw_str(px + 4, y + 1, desc, Color::DarkGrey, bg);
-                }
+                render_inventory_panel(buf, &save_state, px, py, locale);
             }
             DashboardTab::Workshop => {
                 render_workshop_panel(buf, &save_state, px, py, locale, workshop_idx, focus_panel);

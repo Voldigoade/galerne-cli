@@ -1,15 +1,15 @@
-//! Permanent meta-progression upgrades purchased with Gale Shards.
+//! Persistent equipment improvements used by the refuge workbench.
 
 use crate::game::runner::RunnerState;
 use crate::storage::schema::{SaveState, WorkshopLevels};
 
 pub const MAX_WORKSHOP_LEVEL: u32 = 5;
 
-/// Meta-progression upgrades available in the Workshop.
+/// Improvements available at the refuge workbench.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WorkshopUpgradeType {
-    BaseHealth,
-    BaseDamage,
+    ShieldCapacity,
+    DashRecovery,
     MoveSpeed,
     MagnetRadius,
     ShardMultiplier,
@@ -17,8 +17,8 @@ pub enum WorkshopUpgradeType {
 
 impl WorkshopUpgradeType {
     pub const ALL: [WorkshopUpgradeType; 5] = [
-        WorkshopUpgradeType::BaseHealth,
-        WorkshopUpgradeType::BaseDamage,
+        WorkshopUpgradeType::ShieldCapacity,
+        WorkshopUpgradeType::DashRecovery,
         WorkshopUpgradeType::MoveSpeed,
         WorkshopUpgradeType::MagnetRadius,
         WorkshopUpgradeType::ShardMultiplier,
@@ -26,41 +26,11 @@ impl WorkshopUpgradeType {
 
     pub fn title_key(&self) -> &'static str {
         match self {
-            WorkshopUpgradeType::BaseHealth => "base_health",
-            WorkshopUpgradeType::BaseDamage => "dash_cooldown",
+            WorkshopUpgradeType::ShieldCapacity => "wind_shield",
+            WorkshopUpgradeType::DashRecovery => "dash_recovery",
             WorkshopUpgradeType::MoveSpeed => "move_speed",
             WorkshopUpgradeType::MagnetRadius => "magnet_radius",
-            WorkshopUpgradeType::ShardMultiplier => "shard_mult",
-        }
-    }
-
-    pub fn desc_key(&self) -> &'static str {
-        match self {
-            WorkshopUpgradeType::BaseHealth => "base_health_desc",
-            WorkshopUpgradeType::BaseDamage => "dash_cooldown_desc",
-            WorkshopUpgradeType::MoveSpeed => "move_speed_desc",
-            WorkshopUpgradeType::MagnetRadius => "magnet_radius_desc",
-            WorkshopUpgradeType::ShardMultiplier => "shard_mult_desc",
-        }
-    }
-
-    pub fn title(&self) -> &'static str {
-        match self {
-            WorkshopUpgradeType::BaseHealth => "Wind Shield",
-            WorkshopUpgradeType::BaseDamage => "Thruster Venting",
-            WorkshopUpgradeType::MoveSpeed => "Cruising Drive",
-            WorkshopUpgradeType::MagnetRadius => "Collector Coil",
-            WorkshopUpgradeType::ShardMultiplier => "Yield Analyzer",
-        }
-    }
-
-    pub fn description(&self) -> &'static str {
-        match self {
-            WorkshopUpgradeType::BaseHealth => "+1 Starting Wind Shield per rank",
-            WorkshopUpgradeType::BaseDamage => "-10% Dash Cooldown per rank",
-            WorkshopUpgradeType::MoveSpeed => "+1.5 m/s Cruising Speed per rank",
-            WorkshopUpgradeType::MagnetRadius => "+2.0m Shard Magnet reach per rank",
-            WorkshopUpgradeType::ShardMultiplier => "+20% Shard Multiplier per rank",
+            WorkshopUpgradeType::ShardMultiplier => "shard_yield",
         }
     }
 
@@ -70,8 +40,8 @@ impl WorkshopUpgradeType {
 
     pub fn cost(&self, current_level: u32) -> u32 {
         let base = match self {
-            WorkshopUpgradeType::BaseHealth => 10,
-            WorkshopUpgradeType::BaseDamage => 10,
+            WorkshopUpgradeType::ShieldCapacity => 10,
+            WorkshopUpgradeType::DashRecovery => 10,
             WorkshopUpgradeType::MoveSpeed => 15,
             WorkshopUpgradeType::MagnetRadius => 12,
             WorkshopUpgradeType::ShardMultiplier => 20,
@@ -81,8 +51,8 @@ impl WorkshopUpgradeType {
 
     pub fn get_level(&self, levels: &WorkshopLevels) -> u32 {
         match self {
-            WorkshopUpgradeType::BaseHealth => levels.base_health_level,
-            WorkshopUpgradeType::BaseDamage => levels.base_damage_level,
+            WorkshopUpgradeType::ShieldCapacity => levels.base_health_level,
+            WorkshopUpgradeType::DashRecovery => levels.base_damage_level,
             WorkshopUpgradeType::MoveSpeed => levels.move_speed_level,
             WorkshopUpgradeType::MagnetRadius => levels.magnet_radius_level,
             WorkshopUpgradeType::ShardMultiplier => levels.shard_multiplier_level,
@@ -91,8 +61,8 @@ impl WorkshopUpgradeType {
 
     pub fn set_level(&self, levels: &mut WorkshopLevels, new_lvl: u32) {
         match self {
-            WorkshopUpgradeType::BaseHealth => levels.base_health_level = new_lvl,
-            WorkshopUpgradeType::BaseDamage => levels.base_damage_level = new_lvl,
+            WorkshopUpgradeType::ShieldCapacity => levels.base_health_level = new_lvl,
+            WorkshopUpgradeType::DashRecovery => levels.base_damage_level = new_lvl,
             WorkshopUpgradeType::MoveSpeed => levels.move_speed_level = new_lvl,
             WorkshopUpgradeType::MagnetRadius => levels.magnet_radius_level = new_lvl,
             WorkshopUpgradeType::ShardMultiplier => levels.shard_multiplier_level = new_lvl,

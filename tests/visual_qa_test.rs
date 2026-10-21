@@ -6,9 +6,10 @@ use galerne::game::runner::wind::TailwindTier;
 use galerne::game::runner::world::{
     Chunk, ChunkWorld, Landmark, LandmarkKind, CHECKPOINTS, CHUNK_WIDTH,
 };
+use galerne::storage::schema::ItemKind as StoredItemKind;
 use galerne::storage::schema::SaveState;
 use galerne::terminal::buffer::Buffer;
-use galerne::ui::dashboard::{render_refuge_panel, render_workshop_panel};
+use galerne::ui::dashboard::{render_inventory_panel, render_refuge_panel, render_workshop_panel};
 use galerne::ui::i18n::{format_message, t, Locale, ALL_LOCALES};
 
 fn buffer_to_string(buf: &Buffer) -> String {
@@ -771,15 +772,72 @@ fn locked_workshop_explains_what_opens_it_in_each_locale() {
 
         assert!(rendered.contains(t("refuge_workbench_locked", locale)));
         assert!(rendered.contains(t("workbench_locked_hint", locale)));
-        assert!(!rendered.contains(t("base_health", locale)));
+        assert!(!rendered.contains(t("wind_shield", locale)));
 
         save.inventory
             .add(galerne::storage::ItemKind::InductionFilament, 1);
         let mut repaired = Buffer::new(100, 24);
         render_workshop_panel(&mut repaired, &save, 2, 2, locale, 0, false);
         let repaired = buffer_to_string(&repaired);
-        assert!(repaired.contains(t("base_health", locale)));
+        assert!(repaired.contains(t("wind_shield", locale)));
         assert!(repaired.contains(t("workshop_help", locale)));
         assert!(!repaired.contains(t("refuge_workbench_locked", locale)));
+    }
+}
+
+#[test]
+fn inventory_items_use_localized_names_and_descriptions_in_each_locale() {
+    let mut save = SaveState::default();
+    let items = [
+        StoredItemKind::GaleShard,
+        StoredItemKind::ResonanceCore,
+        StoredItemKind::InductionFilament,
+        StoredItemKind::AncientCompass,
+    ];
+    for item in items {
+        save.inventory.add(item, 1);
+    }
+
+    for &locale in ALL_LOCALES {
+        for (width, height, px) in [(60, 20, 23), (80, 24, 27), (236, 53, 27)] {
+            let mut buf = Buffer::new(width, height);
+            render_inventory_panel(&mut buf, &save, px, 4, locale);
+            let rendered = buffer_to_string(&buf);
+            if locale == Locale::En {
+                println!("--- INVENTORY PANEL ({width}x{height}) ---\n{rendered}");
+            }
+            let compact_rendered: String =
+                rendered.chars().filter(|ch| !ch.is_whitespace()).collect();
+            let title_key = if width < 80 || height < 24 {
+                "menu_inventory"
+            } else {
+                "inventory_title"
+            };
+            let expected_title: String = t(title_key, locale)
+                .chars()
+                .filter(|ch| !ch.is_whitespace())
+                .collect();
+            assert!(
+                compact_rendered.contains(&expected_title),
+                "Inventory heading {title_key} was clipped in {locale:?} at {width}x{height}"
+            );
+
+            for item in items {
+                let mut keys = vec![item.name_key()];
+                if width >= 80 && height >= 24 {
+                    keys.push(item.desc_key());
+                }
+                for key in keys {
+                    let expected: String = t(key, locale)
+                        .chars()
+                        .filter(|ch| !ch.is_whitespace())
+                        .collect();
+                    assert!(
+                        compact_rendered.contains(&expected),
+                        "Inventory text {key} was clipped in {locale:?} at {width}x{height}"
+                    );
+                }
+            }
+        }
     }
 }
