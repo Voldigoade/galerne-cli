@@ -29,7 +29,7 @@ fn main() {
             }
         }
         CliAction::Stats => {
-            let state = save_manager.load().unwrap_or_default();
+            let state = load_save_state(&save_manager);
             println!("{}", format_career_stats(&state));
         }
         CliAction::Doctor => {
@@ -114,7 +114,7 @@ fn main() {
             }
         }
         CliAction::Enable => {
-            let mut state = save_manager.load().unwrap_or_default();
+            let mut state = load_save_state(&save_manager);
             state.settings.auto_activate = true;
             if let Err(e) = save_manager.save(&state) {
                 eprintln!("Failed to update settings: {}", e);
@@ -123,7 +123,7 @@ fn main() {
             println!("✓ Automatic wait-time activation enabled.");
         }
         CliAction::Disable => {
-            let mut state = save_manager.load().unwrap_or_default();
+            let mut state = load_save_state(&save_manager);
             state.settings.auto_activate = false;
             if let Err(e) = save_manager.save(&state) {
                 eprintln!("Failed to update settings: {}", e);
@@ -157,6 +157,16 @@ fn main() {
         }
         CliAction::Version => {
             println!("galerne {}", galerne::VERSION);
+        }
+    }
+}
+
+fn load_save_state(save_manager: &SaveManager) -> galerne::storage::SaveState {
+    match save_manager.load_or_default() {
+        Ok(state) => state,
+        Err(error) => {
+            eprintln!("Failed to load save: {}", error);
+            process::exit(1);
         }
     }
 }

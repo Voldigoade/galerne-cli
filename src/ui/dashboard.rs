@@ -173,7 +173,7 @@ pub fn run_dashboard() -> io::Result<()> {
     let mut engine = Engine::new()?;
 
     let save_manager = SaveManager::default_paths();
-    let mut save_state = save_manager.load().unwrap_or_default();
+    let mut save_state = save_manager.load_or_default()?;
 
     let mut current_idx = 0;
     let mut focus_panel = false;
@@ -877,8 +877,7 @@ pub fn run_dashboard() -> io::Result<()> {
                                         let (name, _) = &archives[saves_idx];
                                         match save_manager.restore_archive(name) {
                                             Ok(_) => {
-                                                save_state =
-                                                    save_manager.load().unwrap_or_default();
+                                                save_state = save_manager.load_or_default()?;
                                                 status_banner = Some((
                                                     format!("✓ Restored {} successfully", name),
                                                     Instant::now(),
@@ -969,7 +968,7 @@ pub fn run_direct_play() -> io::Result<()> {
     let _guard = TerminalGuard::enter()?;
     let mut engine = Engine::new()?;
     let save_manager = SaveManager::default_paths();
-    let mut save_state = save_manager.load().unwrap_or_default();
+    let mut save_state = save_manager.load_or_default()?;
     run_manual_game(&mut engine, &save_manager, &mut save_state)
 }
 

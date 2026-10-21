@@ -182,33 +182,3 @@ fn test_pregame_ctrlc_terminates_child_immediately() {
     assert!(logs.iter().any(|l| l.contains("Running in pre-game")));
     assert!(!logs.iter().any(|l| l.contains("Should not be seen")));
 }
-
-#[test]
-fn test_wait_time_saved_not_double_counted_when_leaving_game_view() {
-    let mut save_state = galerne::storage::schema::SaveState::default();
-    assert_eq!(save_state.total_wait_time_saved_secs, 0);
-
-    // Scenario: user plays in game view for 5s, then leaves to task view.
-    // Child terminates in task view after 15s total elapsed.
-    let game_view_duration = 5u64;
-    let total_true_child_duration = 15u64;
-    let child_completed_in_game: Option<std::process::ExitStatus> = None;
-
-    // Line 228-229 logic:
-    save_state.total_play_time_secs += game_view_duration;
-    if child_completed_in_game.is_some() {
-        save_state.total_wait_time_saved_secs += game_view_duration;
-    }
-
-    // Line 313 logic:
-    save_state.total_wait_time_saved_secs += total_true_child_duration;
-
-    assert_eq!(
-        save_state.total_wait_time_saved_secs, 15,
-        "Total wait time saved must equal exactly the true child duration (15s), never 5+15=20s"
-    );
-    assert_eq!(
-        save_state.total_play_time_secs, 5,
-        "Play time must only record the 5s spent playing in game view"
-    );
-}

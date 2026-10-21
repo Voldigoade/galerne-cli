@@ -1,7 +1,8 @@
 use std::fs;
 use std::path::PathBuf;
 
-use galerne::storage::manager::SaveManager;
+use galerne::storage::atomic::encode_with_header;
+use galerne::storage::manager::{SaveLoadError, SaveManager};
 use galerne::storage::schema::{SaveState, CURRENT_SCHEMA_VERSION};
 
 fn temp_test_dir(name: &str) -> PathBuf {
@@ -85,15 +86,105 @@ fn test_future_version_rejection() {
     let dir = temp_test_dir("future_version");
     let manager = SaveManager::with_dir(&dir);
 
-    let state = SaveState {
-        version: CURRENT_SCHEMA_VERSION + 1, // Future version
-        ..Default::default()
-    };
-    manager.save(&state).expect("save succeeds");
+    let mut future_bytes = encode_with_header(CURRENT_SCHEMA_VERSION + 1, b"future payload");
+    future_bytes[16] ^= 0xff;
+    fs::write(manager.primary_save_path(), &future_bytes).expect("write future save");
 
-    // Loading should reject future schema without destroying it
-    let result = manager.load();
-    assert!(result.is_err(), "Future version must be rejected");
+    let result = manager.load_or_default();
+    assert!(matches!(
+        result,
+        Err(SaveLoadError::UnsupportedSchema { .. })
+    ));
+    assert_eq!(
+        fs::read(manager.primary_save_path()).expect("read future save"),
+        future_bytes
+    );
+}
+
+#[test]
+fn test_save_refuses_to_replace_future_primary_or_backup() {
+    let dir = temp_test_dir("future_save_guard");
+    let manager = SaveManager::with_dir(&dir);
+    let future_bytes = encode_with_header(CURRENT_SCHEMA_VERSION + 2, b"newer Galerne data");
+    fs::write(manager.primary_save_path(), &future_bytes).expect("write future primary");
+
+    assert!(manager.save(&SaveState::default()).is_err());
+    assert_eq!(fs::read(manager.primary_save_path()).unwrap(), future_bytes);
+    assert!(manager
+        .save(&SaveState {
+            version: CURRENT_SCHEMA_VERSION + 1,
+            ..SaveState::default()
+        })
+        .is_err());
+
+    fs::remove_file(manager.primary_save_path()).expect("remove future primary");
+    manager
+        .save(&SaveState::default())
+        .expect("write current primary");
+    let primary_before = fs::read(manager.primary_save_path()).unwrap();
+    fs::write(manager.backup_save_path(), &future_bytes).expect("write future backup");
+
+    assert!(manager.save(&SaveState::default()).is_err());
+    assert_eq!(
+        fs::read(manager.primary_save_path()).unwrap(),
+        primary_before
+    );
+    assert_eq!(fs::read(manager.backup_save_path()).unwrap(), future_bytes);
+}
+
+#[test]
+fn test_reset_and_cli_settings_refuse_future_saves() {
+    let dir = temp_test_dir("future_save_callers");
+    let manager = SaveManager::with_dir(&dir);
+    let future_bytes = encode_with_header(CURRENT_SCHEMA_VERSION + 1, b"future progression");
+    fs::write(manager.primary_save_path(), &future_bytes).expect("write future save");
+
+    assert!(manager.archive_and_reset().is_err());
+    assert_eq!(fs::read(manager.primary_save_path()).unwrap(), future_bytes);
+
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_galerne"))
+        .arg("enable")
+        .env("GALERNE_DATA_DIR", &dir)
+        .output()
+        .expect("run enable command");
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("newer version of Galerne"));
+    assert_eq!(fs::read(manager.primary_save_path()).unwrap(), future_bytes);
+}
+
+#[test]
+fn test_missing_save_is_distinct_from_corruption_and_io_failure() {
+    let dir = temp_test_dir("missing_save");
+    let manager = SaveManager::with_dir(&dir);
+    assert!(matches!(manager.load(), Err(SaveLoadError::Missing)));
+    assert_eq!(manager.load_or_default().unwrap(), SaveState::default());
+
+    let blocked_path = dir.join("not_a_directory");
+    fs::write(&blocked_path, b"file").expect("create non-directory parent");
+    let io_manager = SaveManager::with_dir(blocked_path);
+    assert!(matches!(io_manager.load(), Err(SaveLoadError::Io(_))));
+}
+
+#[test]
+fn test_unrecoverable_corruption_is_quarantined_without_creating_defaults() {
+    let dir = temp_test_dir("unrecoverable_corruption");
+    let manager = SaveManager::with_dir(&dir);
+    let corrupt_bytes = b"damaged save bytes";
+    fs::write(manager.primary_save_path(), corrupt_bytes).expect("write corrupt primary");
+
+    assert!(matches!(manager.load(), Err(SaveLoadError::Corrupt(_))));
+    assert!(!manager.primary_save_path().exists());
+    let quarantined = fs::read_dir(&dir)
+        .unwrap()
+        .filter_map(Result::ok)
+        .find(|entry| {
+            entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with("save.dat.corrupt")
+        })
+        .expect("preserve corrupt original in quarantine");
+    assert_eq!(fs::read(quarantined.path()).unwrap(), corrupt_bytes);
 }
 
 #[test]

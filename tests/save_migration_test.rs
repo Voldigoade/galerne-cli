@@ -1,7 +1,7 @@
 use std::fs;
 
 use galerne::storage::atomic::{decode_and_verify, encode_with_header};
-use galerne::storage::manager::SaveManager;
+use galerne::storage::manager::{SaveLoadError, SaveManager};
 
 #[test]
 fn test_v1_save_fixture_loads_perfectly() {
@@ -253,15 +253,40 @@ fn test_future_schema_version_is_rejected_without_overwriting() {
     fs::write(manager.primary_save_path(), &future_bytes).expect("write future save");
 
     let result = manager.load();
-    assert!(result.is_err(), "Future schema version must be rejected");
-    let err_msg = result.unwrap_err().to_string();
-    assert!(err_msg.contains("newer version of Galerne"));
+    assert!(matches!(
+        result,
+        Err(SaveLoadError::UnsupportedSchema { version: 999, .. })
+    ));
 
     // Ensure future file was NOT deleted or overwritten with defaults
-    assert!(
-        manager.primary_save_path().exists(),
-        "Future save must be preserved untouched"
-    );
+    assert_eq!(fs::read(manager.primary_save_path()).unwrap(), future_bytes);
 
     let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[test]
+fn test_migration_failure_preserves_original_save_and_backup() {
+    let temp_dir =
+        std::env::temp_dir().join(format!("galerne_failed_migration_{}", std::process::id()));
+    let _ = fs::remove_dir_all(&temp_dir);
+    fs::create_dir_all(&temp_dir).expect("create temp dir");
+
+    let manager = SaveManager::with_dir(&temp_dir);
+    let original = encode_with_header(2, b"not valid v2 json");
+    fs::write(manager.primary_save_path(), &original).expect("write v2 fixture");
+
+    assert!(matches!(manager.load(), Err(SaveLoadError::Migration(_))));
+    assert_eq!(fs::read(manager.primary_save_path()).unwrap(), original);
+
+    let migration_backup = fs::read_dir(&temp_dir)
+        .unwrap()
+        .filter_map(Result::ok)
+        .find(|entry| {
+            entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with("save.dat.migration_v2_to_v3.")
+        })
+        .expect("pre-migration backup exists");
+    assert_eq!(fs::read(migration_backup.path()).unwrap(), original);
 }

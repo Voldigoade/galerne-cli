@@ -15,6 +15,7 @@ use crate::interceptor::process::ProcessSupervisor;
 use crate::interceptor::signal;
 use crate::interceptor::transition::run_completion_transition;
 use crate::storage::manager::SaveManager;
+use crate::storage::schema::SaveState;
 use crate::storage::workshop::apply_workshop_to_runner;
 use crate::terminal::engine::Engine;
 use crate::terminal::guard::TerminalGuard;
@@ -28,18 +29,20 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
     }
 
     let save_manager = SaveManager::default_paths();
-    let mut save_state = save_manager.load().unwrap_or_default();
+    let mut save_state = match save_manager.load_or_default() {
+        Ok(save_state) => save_state,
+        Err(error) => {
+            eprintln!(
+                "[galerne] Save unavailable; running task without gameplay: {}",
+                error
+            );
+            return run_direct_task(args);
+        }
+    };
 
     // If auto-activation is disabled, execute directly without gameplay
     if !save_state.settings.auto_activate {
-        let mut cmd = std::process::Command::new(&args[0]);
-        if args.len() > 1 {
-            cmd.args(&args[1..]);
-        }
-        let status = cmd.status()?;
-        return Ok(status
-            .code()
-            .unwrap_or(if status.success() { 0 } else { 1 }));
+        return run_direct_task(args);
     }
 
     // Check command eligibility: filter out non-eligible commands, interactive programs,
@@ -48,14 +51,7 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
         Some(class) => class,
         None => {
             // Bypass Galerne completely with inherited stdin/stdout/stderr
-            let mut cmd = std::process::Command::new(&args[0]);
-            if args.len() > 1 {
-                cmd.args(&args[1..]);
-            }
-            let status = cmd.status()?;
-            return Ok(status
-                .code()
-                .unwrap_or(if status.success() { 0 } else { 1 }));
+            return run_direct_task(args);
         }
     };
 
@@ -67,6 +63,7 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
     let decision = history.evaluate_decision(&project_id, matched_class);
 
     let start_time = Instant::now();
+    let mut wait_time_accounting = WaitTimeAccounting::default();
 
     // Install cross-platform Ctrl+C handler
     signal::setup_handler();
@@ -150,8 +147,9 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
     while child_completed_in_game.is_none() && !left_game_view {
         // Check if child process has finished
         if let Some(status) = supervisor.try_wait()? {
-            child_completed_in_game = Some(status);
+            let completion_duration = start_time.elapsed();
             game.start_completion_transition(status.success());
+            child_completed_in_game = Some((status, completion_duration));
         }
 
         // Handle user input
@@ -231,8 +229,8 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
 
     // Persist career stats and exact active run
     save_state.total_play_time_secs += total_duration;
-    if child_completed_in_game.is_some() {
-        save_state.total_wait_time_saved_secs += total_duration;
+    if let Some((_, completion_duration)) = child_completed_in_game.as_ref() {
+        wait_time_accounting.record_completion(&mut save_state, *completion_duration);
     }
     save_state.total_distance_traveled += dist_gained;
     save_state.currency_shards += shards_gained;
@@ -301,9 +299,9 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
         );
     }
 
-    if let Some(status) = child_completed_in_game {
+    if let Some((status, completion_duration)) = child_completed_in_game {
         // Child completed while in game view: play brief completion transition
-        let true_duration = start_time.elapsed().as_secs_f32();
+        let true_duration = completion_duration.as_secs_f32();
         run_completion_transition(
             &mut engine,
             status.success(),
@@ -359,7 +357,8 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
     };
 
     // Measure TRUE child duration at actual termination
-    let true_duration = start_time.elapsed().as_secs_f32();
+    let completion_duration = start_time.elapsed();
+    let true_duration = completion_duration.as_secs_f32();
 
     // User-cancelled tasks must NEVER poison prediction history on ANY path
     if !is_cancelled_status(was_cancelled, &exit_status) {
@@ -367,8 +366,7 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
         let _ = history.save_to_file(&history_path);
     }
 
-    // Update career total wait time with true measured duration
-    save_state.total_wait_time_saved_secs += true_duration as u64;
+    wait_time_accounting.record_completion(&mut save_state, completion_duration);
     let _ = save_manager.save(&save_state);
 
     Ok(exit_status
@@ -421,4 +419,68 @@ fn rand_seed() -> u64 {
         .duration_since(SystemTime::UNIX_EPOCH)
         .map(|d| d.as_nanos() as u64)
         .unwrap_or(0xdeadbeef12345678)
+}
+
+fn run_direct_task(args: &[String]) -> io::Result<i32> {
+    let mut command = std::process::Command::new(&args[0]);
+    if args.len() > 1 {
+        command.args(&args[1..]);
+    }
+    let status = command.status()?;
+    Ok(status
+        .code()
+        .unwrap_or(if status.success() { 0 } else { 1 }))
+}
+
+#[derive(Default)]
+struct WaitTimeAccounting {
+    recorded: bool,
+}
+
+impl WaitTimeAccounting {
+    fn record_completion(&mut self, save_state: &mut SaveState, duration: Duration) {
+        if self.recorded {
+            return;
+        }
+        save_state.total_wait_time_saved_secs = save_state
+            .total_wait_time_saved_secs
+            .saturating_add(duration.as_secs());
+        self.recorded = true;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::WaitTimeAccounting;
+    use crate::storage::schema::SaveState;
+    use std::time::Duration;
+
+    #[test]
+    fn wait_time_is_recorded_once_after_leaving_game_view() {
+        let mut save_state = SaveState::default();
+        let mut accounting = WaitTimeAccounting::default();
+        let game_view_duration = Duration::from_secs(5);
+        save_state.total_play_time_secs += game_view_duration.as_secs();
+
+        assert_eq!(save_state.total_wait_time_saved_secs, 0);
+
+        let child_duration = Duration::from_secs(15);
+        accounting.record_completion(&mut save_state, child_duration);
+        accounting.record_completion(&mut save_state, child_duration);
+
+        assert_eq!(save_state.total_play_time_secs, 5);
+        assert_eq!(save_state.total_wait_time_saved_secs, 15);
+    }
+
+    #[test]
+    fn in_game_completion_records_the_child_duration_once() {
+        let mut save_state = SaveState::default();
+        let mut accounting = WaitTimeAccounting::default();
+        let child_duration = Duration::from_secs(9);
+
+        accounting.record_completion(&mut save_state, child_duration);
+        accounting.record_completion(&mut save_state, child_duration);
+
+        assert_eq!(save_state.total_wait_time_saved_secs, 9);
+    }
 }

@@ -15,7 +15,6 @@ fn test_windows_update_preserves_save_data_and_settings() {
 
     // Create existing save state with high progression
     let existing_state = SaveState {
-        version: 2,
         total_play_time_secs: 5500,
         total_wait_time_saved_secs: 3200,
         total_runs_started: 35,
