@@ -49,6 +49,8 @@ jobs:
           cp README.md LICENSE package/
           tar -czf ${{ matrix.artifact_name }} -C package .
           sha256sum ${{ matrix.artifact_name }} > ${{ matrix.artifact_name }}.sha256
+          cp target/${{ matrix.target }}/release/galerne galerne-x86_64-unknown-linux-gnu
+          sha256sum galerne-x86_64-unknown-linux-gnu > galerne-x86_64-unknown-linux-gnu.sha256
 
       - name: Package Windows Archive
         if: matrix.os == 'windows-latest'
@@ -68,6 +70,7 @@ jobs:
             ${{ matrix.artifact_name }}
             ${{ matrix.artifact_name }}.sha256
             Galerne-Setup-x86_64.exe*
+            galerne-x86_64-unknown-linux-gnu*
 
   publish-github-release:
     name: Publish GitHub Release

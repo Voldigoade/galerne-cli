@@ -4,7 +4,7 @@ An ultra-lightweight, persistent native Rust terminal game designed explicitly a
 
 ```text
 ╭─────────────────────────────────────────────────────────────────────────────╮
-│                               GALERNE v0.1.1                                │
+│                               GALERNE v0.2.0                                │
 ├──────────────────────┬──────────────────────────────────────────────────────┤
 │ ▶ PLAY               │  DEPLOYMENT CONTROLS                                 │
 │   WORKSHOP           │                                                      │
@@ -29,9 +29,9 @@ All metrics are measured empirically from release binaries on standard Linux x86
 
 | Metric | Measured Value (Linux) | Constraint Budget |
 | :--- | :--- | :--- |
-| **Stripped Binary Size** | **798 KiB** | < 5.0 MiB |
+| **Stripped Binary Size** | **878 KiB** | < 5.0 MiB |
 | **Startup Latency** | **< 2.0 ms** | < 15.0 ms |
-| **Resident Memory (RSS)** | **3.06 MiB** | < 20.0 MiB |
+| **Resident Memory (RSS)** | **3.10 MiB** | < 20.0 MiB |
 | **Idle CPU Utilization** | **0.0%** (no daemon) | 0.0% |
 | **Typical Save Size** | **434 bytes** | < 5.0 KiB |
 | **Diff Renderer Latency** | **4.46 µs / frame** (224k fps throughput) | Real-time |
@@ -131,13 +131,15 @@ galerne restore <archive>  # Restore a previous archived save snapshot
 galerne setup              # Configure shell hooks (Bash, Zsh, PowerShell)
 galerne enable             # Enable automatic wait-time activation
 galerne disable            # Disable automatic activation (preserves saves)
+galerne update             # Safely install latest release with SHA-256 verification
+galerne update --check     # Check for newer releases without modifying system
 galerne uninstall          # Reversibly remove shell hooks and files
 galerne wrap <command...>  # Explicitly supervise a long-running build command
 ```
 
 ---
 
-## Supported Task Detection
+## Smart Activation & Wait-Time Prediction
 
 Galerne automatically detects and intercepts eligible developer build operations:
 
@@ -147,11 +149,27 @@ Galerne automatically detects and intercepts eligible developer build operations
 - **Native:** `make`, `ninja`, `cmake --build`
 - **Go & Python:** `go build`, `go test`, `pytest`
 
-### Anti-Flicker & Duration Prediction
+### Project-Aware Intelligence
+- **Project Isolation:** Predictions are strictly scoped to `(Project + Command)`. A 45-second build in a large repository never causes a 2-second build in a smaller project to launch Galerne.
+- **5-Second Wait Protection:** Unknown or new commands use a conservative fallback threshold of 8.0 seconds. Any command completing within ~5 seconds completes normally with **zero game appearance or terminal flicker**.
+- **Known-Long Operations:** Operations historically taking ≥ 8.0 seconds enter gameplay almost immediately (< 150 ms anti-flicker guard).
+- **Graceful Extension:** Fast operations that unexpectedly take long (e.g., clean rebuilds) will smoothly activate once the 8.0s threshold is crossed.
+- **Cancellation Immunity:** Tasks interrupted by the user (Ctrl+C) are excluded from duration history, preventing aborted tasks from corrupting future predictions.
+- **Privacy Protection:** Project identities are derived from local persistent salts. Raw absolute file paths and arbitrary command-line arguments are **never stored**.
+- **Interactive Exclusion:** Interactive commands (`cargo run`, REPLs, `git`, `vim`) and watch modes (`--watch`) **strictly bypass** Galerne with inherited stdio.
 
-- Commands historically taking longer than 8 seconds enter gameplay almost immediately (< 150 ms).
-- Fast or unknown commands observe a 2.5-second anti-flicker delay. If your build finishes within 2.5 seconds, Galerne never opens, producing **zero visual flicker**.
-- Interactive commands (`cargo run`, REPLs, `git`, `vim`) and watch modes (`--watch`) are **strictly excluded**.
+---
+
+## Safe Self-Update (`galerne update`)
+
+Galerne features an explicit, offline-by-default self-updater:
+- **No Background Daemons:** Zero background update checking, zero polling, and zero network calls during gameplay or normal commands.
+- **SHA-256 Integrity Verification:** Every downloaded payload is validated against release checksums before modification.
+- **Linux:** Performs atomic binary replacement (`temp sibling + rename`) with automated rollback if the replacement fails smoke testing.
+- **Windows:** Safely hands off to `Galerne-Setup-x86_64.exe --upgrade --wait-pid <PID>`, waiting for the active process to exit before replacing the locked binary.
+- **Data Preservation:** Save progression, workshop upgrades, and user settings are 100% preserved across upgrades.
+
+*(Note: Users on v0.1.1 must install v0.2.0 once manually; all future updates can then be performed seamlessly via `galerne update`.)*
 
 ---
 
@@ -184,9 +202,9 @@ Run read-only diagnostics at any time to verify system health:
 
 ```bash
 $ galerne doctor
-Galerne v0.1.1 System Diagnostics
+Galerne v0.2.0 System Diagnostics
 
-[✓] Executable:        /usr/local/bin/galerne (v0.1.1)
+[✓] Executable:        /usr/local/bin/galerne (v0.2.0)
 [✓] Target Platform:   linux x86_64
 [✓] Standard Output:   Interactive TTY
 [✓] Terminal Size:     80x24 (Meets 60x20 minimum)
