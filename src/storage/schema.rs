@@ -164,6 +164,18 @@ impl Default for SaveState {
     }
 }
 
+impl SaveState {
+    pub fn workbench_available(&self) -> bool {
+        self.refuge.workbench_unlocked || self.inventory.has(ItemKind::InductionFilament)
+    }
+
+    pub fn unlock_workbench_from_inventory(&mut self) {
+        if self.inventory.has(ItemKind::InductionFilament) {
+            self.refuge.workbench_unlocked = true;
+        }
+    }
+}
+
 /// Permanent workshop upgrades purchased with Gale Shards.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkshopLevels {

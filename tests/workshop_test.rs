@@ -1,10 +1,52 @@
-use galerne::storage::schema::{SaveState, WorkshopLevels};
+use galerne::storage::schema::{RefugeProgress, SaveState, WorkshopLevels};
 use galerne::storage::workshop::{purchase_workshop_upgrade, WorkshopUpgradeType};
+
+#[test]
+fn copper_braid_unlocks_the_workbench_and_locked_upgrades_cannot_be_bought() {
+    let mut state = SaveState {
+        currency_shards: 50,
+        ..Default::default()
+    };
+
+    assert!(!purchase_workshop_upgrade(
+        &mut state,
+        WorkshopUpgradeType::BaseHealth
+    ));
+    assert_eq!(state.currency_shards, 50);
+    assert_eq!(state.workshop.base_health_level, 0);
+
+    state
+        .inventory
+        .add(galerne::storage::ItemKind::InductionFilament, 1);
+    assert!(purchase_workshop_upgrade(
+        &mut state,
+        WorkshopUpgradeType::BaseHealth
+    ));
+    assert!(state.refuge.workbench_unlocked);
+    assert_eq!(state.workshop.base_health_level, 1);
+}
+
+#[test]
+fn copper_braid_unlocks_the_persistent_workbench_flag() {
+    let mut state = SaveState::default();
+    state
+        .inventory
+        .add(galerne::storage::ItemKind::InductionFilament, 1);
+
+    state.unlock_workbench_from_inventory();
+
+    assert!(state.refuge.workbench_unlocked);
+    assert!(state.workbench_available());
+}
 
 #[test]
 fn test_workshop_upgrade_costs_and_purchase() {
     let mut state = SaveState {
         currency_shards: 50,
+        refuge: RefugeProgress {
+            workbench_unlocked: true,
+            ..Default::default()
+        },
         ..Default::default()
     };
 
@@ -26,6 +68,10 @@ fn test_workshop_upgrade_costs_and_purchase() {
 fn test_insufficient_shards_rejection() {
     let mut state = SaveState {
         currency_shards: 5,
+        refuge: RefugeProgress {
+            workbench_unlocked: true,
+            ..Default::default()
+        },
         ..Default::default()
     };
 
@@ -39,6 +85,10 @@ fn test_insufficient_shards_rejection() {
 fn test_max_level_clamping() {
     let mut state = SaveState {
         currency_shards: 1000,
+        refuge: RefugeProgress {
+            workbench_unlocked: true,
+            ..Default::default()
+        },
         workshop: WorkshopLevels {
             base_damage_level: 5,
             ..Default::default()

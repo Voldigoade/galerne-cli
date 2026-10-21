@@ -145,7 +145,14 @@ pub fn render_refuge_panel(
         bg,
     );
 
-    let workbench_status = t("refuge_workbench_status", locale);
+    let workbench_status = t(
+        if save_state.workbench_available() {
+            "refuge_workbench_status"
+        } else {
+            "refuge_workbench_locked"
+        },
+        locale,
+    );
     buf.draw_str(px, y_info + 1, workbench_status, Color::White, bg);
 
     let progress_summary = format_message(
@@ -191,6 +198,83 @@ pub fn render_refuge_panel(
             Style::new(Color::Yellow, bg).bold(),
         );
     }
+}
+
+pub fn render_workshop_panel(
+    buf: &mut crate::terminal::buffer::Buffer,
+    save_state: &crate::storage::schema::SaveState,
+    px: u16,
+    py: u16,
+    locale: Locale,
+    workshop_idx: usize,
+    focus_panel: bool,
+) {
+    let bg = Color::Reset;
+    let w_header = format_message(
+        "workshop_header",
+        locale,
+        &[
+            ("title", t("workshop_title", locale).to_owned()),
+            ("count", save_state.currency_shards.to_string()),
+        ],
+    );
+    buf.draw_str_styled(px, py, &w_header, Style::new(Color::Yellow, bg).bold());
+
+    if !save_state.workbench_available() {
+        buf.draw_str_styled(
+            px,
+            py + 2,
+            t("refuge_workbench_locked", locale),
+            Style::new(Color::DarkYellow, bg).bold(),
+        );
+        buf.draw_str(
+            px,
+            py + 4,
+            t("workbench_locked_hint", locale),
+            Color::DarkGrey,
+            bg,
+        );
+        return;
+    }
+
+    for (idx, up_type) in WorkshopUpgradeType::ALL.iter().enumerate() {
+        let y = py + 2 + (idx as u16 * 2);
+        let lvl = up_type.get_level(&save_state.workshop);
+        let is_sel = idx == workshop_idx && focus_panel;
+
+        let cost_str = if lvl >= up_type.max_level() {
+            t("max_level", locale).to_string()
+        } else {
+            format_message(
+                "shard_cost",
+                locale,
+                &[("count", up_type.cost(lvl).to_string())],
+            )
+        };
+
+        let rank = format_message(
+            "rank_value",
+            locale,
+            &[("rank", lvl.to_string()), ("max", "5".to_owned())],
+        );
+        let line = format!(
+            "{} {:<20} {}  [{}]",
+            if is_sel { "▶" } else { " " },
+            t(up_type.title_key(), locale),
+            rank,
+            cost_str
+        );
+
+        let style = if is_sel {
+            Style::new(Color::Black, Color::Yellow).bold()
+        } else if idx == workshop_idx {
+            Style::new(Color::Yellow, bg)
+        } else {
+            Style::new(Color::White, bg)
+        };
+        buf.draw_str_styled(px, y, &line, style);
+    }
+    buf.draw_str(px, py + 13, t("workshop_help", locale), Color::DarkGrey, bg);
 }
 
 /// Runs the interactive terminal home dashboard.
@@ -408,54 +492,7 @@ pub fn run_dashboard() -> io::Result<()> {
                 }
             }
             DashboardTab::Workshop => {
-                let w_header = format_message(
-                    "workshop_header",
-                    locale,
-                    &[
-                        ("title", t("workshop_title", locale).to_owned()),
-                        ("count", save_state.currency_shards.to_string()),
-                    ],
-                );
-                buf.draw_str_styled(px, py, &w_header, Style::new(Color::Yellow, bg).bold());
-
-                for (idx, up_type) in WorkshopUpgradeType::ALL.iter().enumerate() {
-                    let y = py + 2 + (idx as u16 * 2);
-                    let lvl = up_type.get_level(&save_state.workshop);
-                    let is_sel = idx == workshop_idx && focus_panel;
-
-                    let cost_str = if lvl >= up_type.max_level() {
-                        t("max_level", locale).to_string()
-                    } else {
-                        format_message(
-                            "shard_cost",
-                            locale,
-                            &[("count", up_type.cost(lvl).to_string())],
-                        )
-                    };
-
-                    let rank = format_message(
-                        "rank_value",
-                        locale,
-                        &[("rank", lvl.to_string()), ("max", "5".to_owned())],
-                    );
-                    let line = format!(
-                        "{} {:<20} {}  [{}]",
-                        if is_sel { "▶" } else { " " },
-                        t(up_type.title_key(), locale),
-                        rank,
-                        cost_str
-                    );
-
-                    let style = if is_sel {
-                        Style::new(Color::Black, Color::Yellow).bold()
-                    } else if idx == workshop_idx {
-                        Style::new(Color::Yellow, bg)
-                    } else {
-                        Style::new(Color::White, bg)
-                    };
-                    buf.draw_str_styled(px, y, &line, style);
-                }
-                buf.draw_str(px, py + 13, t("workshop_help", locale), Color::DarkGrey, bg);
+                render_workshop_panel(buf, &save_state, px, py, locale, workshop_idx, focus_panel);
             }
             DashboardTab::Stats => {
                 buf.draw_str_styled(
@@ -870,7 +907,12 @@ pub fn run_dashboard() -> io::Result<()> {
                                 }
                                 DashboardTab::Workshop => {
                                     let target = WorkshopUpgradeType::ALL[workshop_idx];
-                                    if purchase_workshop_upgrade(&mut save_state, target) {
+                                    if !save_state.workbench_available() {
+                                        status_banner = Some((
+                                            t("workbench_locked_hint", locale).to_owned(),
+                                            Instant::now(),
+                                        ));
+                                    } else if purchase_workshop_upgrade(&mut save_state, target) {
                                         if let Err(e) = save_manager.save(&save_state) {
                                             status_banner = Some((
                                                 format_message(
@@ -1072,6 +1114,7 @@ fn sync_game_to_save_state(
             _ => {}
         }
     }
+    save_state.unlock_workbench_from_inventory();
     for cp_id in &game.unlocked_checkpoints {
         if !save_state
             .world_progress

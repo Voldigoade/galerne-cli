@@ -8,7 +8,7 @@ use galerne::game::runner::world::{
 };
 use galerne::storage::schema::SaveState;
 use galerne::terminal::buffer::Buffer;
-use galerne::ui::dashboard::render_refuge_panel;
+use galerne::ui::dashboard::{render_refuge_panel, render_workshop_panel};
 use galerne::ui::i18n::{format_message, t, Locale, ALL_LOCALES};
 
 fn buffer_to_string(buf: &Buffer) -> String {
@@ -731,13 +731,55 @@ fn test_visual_qa_refuge_dormant_and_restored_80x24() {
 fn test_refuge_panel_uses_selected_locale() {
     for &locale in ALL_LOCALES {
         let mut buf = Buffer::new(100, 24);
-        render_refuge_panel(&mut buf, &SaveState::default(), 2, 2, locale);
+        let mut save = SaveState::default();
+        render_refuge_panel(&mut buf, &save, 2, 2, locale);
         let rendered = buffer_to_string(&buf);
         assert!(
             rendered.contains(t("refuge_dormant_status", locale)),
             "refuge status should use locale {:?}",
             locale
         );
+        if locale == Locale::En {
+            println!("--- WORKBENCH LOCKED REFUGE (100x24) ---\n{rendered}");
+        }
+        assert!(rendered.contains(t("refuge_workbench_locked", locale)));
         assert!(rendered.contains("1/6"));
+
+        save.inventory
+            .add(galerne::storage::ItemKind::InductionFilament, 1);
+        let mut repaired = Buffer::new(100, 24);
+        render_refuge_panel(&mut repaired, &save, 2, 2, locale);
+        let repaired = buffer_to_string(&repaired);
+        if locale == Locale::En {
+            println!("--- WORKBENCH REPAIRED REFUGE (100x24) ---\n{repaired}");
+        }
+        assert!(repaired.contains(t("refuge_workbench_status", locale)));
+        assert!(!repaired.contains(t("refuge_workbench_locked", locale)));
+    }
+}
+
+#[test]
+fn locked_workshop_explains_what_opens_it_in_each_locale() {
+    for &locale in ALL_LOCALES {
+        let mut save = SaveState::default();
+        let mut buf = Buffer::new(100, 24);
+        render_workshop_panel(&mut buf, &save, 2, 2, locale, 0, false);
+        let rendered = buffer_to_string(&buf);
+        if locale == Locale::En {
+            println!("--- WORKSHOP LOCKED (100x24) ---\n{rendered}");
+        }
+
+        assert!(rendered.contains(t("refuge_workbench_locked", locale)));
+        assert!(rendered.contains(t("workbench_locked_hint", locale)));
+        assert!(!rendered.contains(t("base_health", locale)));
+
+        save.inventory
+            .add(galerne::storage::ItemKind::InductionFilament, 1);
+        let mut repaired = Buffer::new(100, 24);
+        render_workshop_panel(&mut repaired, &save, 2, 2, locale, 0, false);
+        let repaired = buffer_to_string(&repaired);
+        assert!(repaired.contains(t("base_health", locale)));
+        assert!(repaired.contains(t("workshop_help", locale)));
+        assert!(!repaired.contains(t("refuge_workbench_locked", locale)));
     }
 }

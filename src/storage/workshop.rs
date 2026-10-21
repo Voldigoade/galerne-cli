@@ -102,6 +102,10 @@ impl WorkshopUpgradeType {
 
 /// Attempts to purchase a workshop upgrade rank. Returns true if successful.
 pub fn purchase_workshop_upgrade(state: &mut SaveState, upgrade: WorkshopUpgradeType) -> bool {
+    if !state.workbench_available() {
+        return false;
+    }
+
     let current_lvl = upgrade.get_level(&state.workshop);
     if current_lvl >= upgrade.max_level() {
         return false;
@@ -114,6 +118,7 @@ pub fn purchase_workshop_upgrade(state: &mut SaveState, upgrade: WorkshopUpgrade
 
     state.currency_shards -= cost;
     upgrade.set_level(&mut state.workshop, current_lvl + 1);
+    state.refuge.workbench_unlocked = true;
     true
 }
 
