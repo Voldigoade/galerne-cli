@@ -79,7 +79,8 @@ pub fn replace_and_verify_windows_binary(target_bin: &Path, binary_bytes: &[u8])
         }
 
         let out_str = String::from_utf8_lossy(&output.stdout);
-        if !out_str.contains("galerne") {
+        let first_line = out_str.lines().next().unwrap_or("").trim().to_lowercase();
+        if !first_line.starts_with("galerne ") && !first_line.starts_with("galerne v") {
             return Err(io::Error::other(format!(
                 "Smoke test produced unexpected version output: '{}'",
                 out_str.trim()

@@ -99,9 +99,10 @@ pub fn apply_linux_update(target_exe: &Path, new_binary_bytes: &[u8]) -> io::Res
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout);
-        if !stdout.to_lowercase().contains("galerne") {
+        let first_line = stdout.lines().next().unwrap_or("").trim().to_lowercase();
+        if !first_line.starts_with("galerne ") && !first_line.starts_with("galerne v") {
             return Err(io::Error::other(format!(
-                "Smoke test output did not contain 'galerne': '{}'",
+                "Smoke test output did not identify as 'galerne': '{}'",
                 stdout.trim()
             )));
         }
