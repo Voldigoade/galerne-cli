@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use super::action::{ActionState, PlayerInput};
 use super::items::{FloatingIndicator, ItemKind};
-use super::player::RunnerPlayer;
+use super::player::{RunnerPlayer, PLAYER_SPRITE_LEFT_OFFSET};
 use super::region::{sector_for_distance, SectorKind};
 use super::wind::{TailwindTier, WindKind};
 use super::world::{ChunkWorld, LandmarkKind, CHUNK_WIDTH};
@@ -734,23 +734,44 @@ impl RunnerState {
         }
 
         let player_sprite = self.player.current_sprite();
-        let base_y = self.player.y.round() as usize;
-        let is_invulnerable = self.player.invulnerable_timer > 0.0;
+        let base_y = self.player.y.round() as i32;
+        let sprite_x = self.player.x.round() as i32 - PLAYER_SPRITE_LEFT_OFFSET as i32;
+        let body_color = if self.player.invulnerable_timer > 0.0 {
+            Color::Cyan
+        } else {
+            Color::White
+        };
 
         for (line_idx, line) in player_sprite.iter().rev().enumerate() {
-            let draw_y = base_y.saturating_sub(line_idx);
-            if draw_y < height {
-                let fg_color = if is_invulnerable {
-                    Color::Cyan
-                } else if self.player.shields > 0 {
-                    Color::Green
-                } else {
-                    Color::White
+            let draw_y = base_y - line_idx as i32;
+            if !(0..height as i32).contains(&draw_y) {
+                continue;
+            }
+
+            for (column, glyph) in line.chars().enumerate() {
+                let draw_x = sprite_x + column as i32;
+                if !(0..width as i32).contains(&draw_x) {
+                    continue;
+                }
+                if glyph == ' ' {
+                    buf.set_char(
+                        draw_x as u16,
+                        draw_y as u16,
+                        ' ',
+                        Color::Reset,
+                        Color::Black,
+                    );
+                    continue;
+                }
+                let fg_color = match glyph {
+                    '~' => Color::Cyan,
+                    '#' => Color::Yellow,
+                    _ => body_color,
                 };
-                buf.draw_str_styled(
-                    self.player.x as u16,
+                buf.set_styled(
+                    draw_x as u16,
                     draw_y as u16,
-                    line,
+                    glyph,
                     Style::new(fg_color, Color::Black).bold(),
                 );
             }
@@ -758,7 +779,11 @@ impl RunnerState {
 
         for ind in &self.floating_indicators {
             let draw_x = ind.x.round() as u16;
-            let draw_y = ind.y.round() as u16;
+            let label_y = ind
+                .y
+                .min(base_y as f32 - player_sprite.len() as f32 - 1.0)
+                .max(3.0);
+            let draw_y = label_y.round() as u16;
             if (draw_x as usize) < width && (draw_y as usize) < height {
                 buf.draw_str_styled(
                     draw_x,
