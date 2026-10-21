@@ -101,29 +101,37 @@ fn main() {
             }
         }
         CliAction::Reset { force } => {
+            let locale = Locale::detect();
             if !force {
-                print!("Are you sure you want to archive and reset career progression? [y/N]: ");
+                print!("{}", t("cli_reset_prompt", locale));
                 let _ = io::stdout().flush();
                 let mut input = String::new();
-                if io::stdin().read_line(&mut input).is_err()
-                    || !matches!(input.trim().to_lowercase().as_str(), "y" | "yes")
-                {
-                    println!("Reset cancelled. Progression unchanged.");
+                if io::stdin().read_line(&mut input).is_err() || !is_confirmation(&input, locale) {
+                    println!("{}", t("cli_reset_cancelled", locale));
                     return;
                 }
             }
 
-            println!("Archiving existing progression before reset...");
+            println!("{}", t("cli_reset_start", locale));
             match save_manager.archive_and_reset() {
                 Ok(archive_path) => {
-                    println!(
-                        "✓ Previous save successfully archived to: {}",
-                        archive_path.display()
-                    );
-                    println!("✓ Clean progression initialized. Your history is preserved in the archive.");
+                    if archive_path.exists() {
+                        println!(
+                            "✓ {}",
+                            format_message(
+                                "cli_reset_archive_path",
+                                locale,
+                                &[("path", archive_path.display().to_string())],
+                            )
+                        );
+                    }
+                    println!("✓ {}", t("cli_reset_done", locale));
                 }
                 Err(e) => {
-                    eprintln!("Failed to archive and reset: {}", e);
+                    eprintln!(
+                        "{}",
+                        format_message("cli_reset_error", locale, &[("error", e.to_string())])
+                    );
                     process::exit(1);
                 }
             }
@@ -136,15 +144,23 @@ fn main() {
                 archive_name.clone()
             };
 
+            let locale = Locale::detect();
             match save_manager.restore_archive(&clean_name) {
                 Ok(_) => {
                     println!(
-                        "✓ Successfully restored career progression from: {}",
-                        clean_name
+                        "✓ {}",
+                        format_message("archive_restored", locale, &[("name", clean_name)])
                     );
                 }
                 Err(e) => {
-                    eprintln!("Failed to restore archive '{}': {}", clean_name, e);
+                    eprintln!(
+                        "{}",
+                        format_message(
+                            "archive_restore_failed",
+                            locale,
+                            &[("error", e.to_string())],
+                        )
+                    );
                     process::exit(1);
                 }
             }
@@ -211,4 +227,15 @@ fn load_save_state(save_manager: &SaveManager) -> galerne::storage::SaveState {
             process::exit(1);
         }
     }
+}
+
+fn is_confirmation(input: &str, locale: Locale) -> bool {
+    let answer = input.trim().to_lowercase();
+    let accepted = match locale {
+        Locale::En => &["y", "yes"][..],
+        Locale::Fr => &["o", "oui", "y", "yes"][..],
+        Locale::Es => &["s", "si", "sí", "y", "yes"][..],
+        Locale::ZhCn => &["是", "y", "yes"][..],
+    };
+    accepted.contains(&answer.as_str())
 }
