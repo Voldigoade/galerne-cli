@@ -4,19 +4,19 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ItemKind {
-    /// Gale Shard currency: [*]
+    /// Gale Shard currency: `[*]`
     GaleShard,
-    /// Speed surge: [>>]
+    /// Speed surge: `[>>]`
     SpeedSurge,
-    /// Kinetic wind shield: (O)
+    /// Kinetic wind shield: `(O)`
     WindShield,
-    /// Magnetic attractor: [+]
+    /// Magnetic attractor: `[+]`
     ShardMagnet,
-    /// Persistent ancient relic: [<#>]
+    /// Persistent ancient relic: `[<#>]`
     ResonanceCore,
-    /// Persistent conduit component: [~|~]
+    /// Persistent conduit component: `[~|~]`
     InductionFilament,
-    /// Persistent ancient compass: [(*)]
+    /// Persistent ancient compass: `[(*)]`
     AncientCompass,
 }
 
