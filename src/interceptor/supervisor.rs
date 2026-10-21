@@ -226,7 +226,9 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
 
     // Persist career stats and exact active run
     save_state.total_play_time_secs += total_duration;
-    save_state.total_wait_time_saved_secs += total_duration;
+    if child_completed_in_game.is_some() {
+        save_state.total_wait_time_saved_secs += total_duration;
+    }
     save_state.total_distance_traveled += dist_gained;
     save_state.currency_shards += shards_gained;
 
