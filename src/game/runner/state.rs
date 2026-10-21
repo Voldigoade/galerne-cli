@@ -6,13 +6,15 @@ use serde::{Deserialize, Serialize};
 use super::action::{ActionState, PlayerInput};
 use super::items::{FloatingIndicator, ItemKind};
 use super::player::RunnerPlayer;
-use super::world::{ChunkWorld, CHUNK_WIDTH};
+use super::region::{sector_for_distance, SectorKind};
+use super::wind::{TailwindTier, WindKind};
+use super::world::{ChunkWorld, LandmarkKind, CHUNK_WIDTH};
 use crate::terminal::buffer::{Buffer, Color, Style};
 use crate::ui::i18n::{t, Locale};
 
 pub const BASE_FORWARD_SPEED: f32 = 18.0;
 pub const MAX_FORWARD_SPEED: f32 = 36.0;
-pub const SPEED_ACCELERATION_RATE: f32 = 0.15; // Slowly ramps up over time
+pub const SPEED_ACCELERATION_RATE: f32 = 0.15;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct RunnerSnapshot {
@@ -32,6 +34,16 @@ pub struct RunnerSnapshot {
     pub onboarding_slide_done: bool,
     #[serde(default)]
     pub relay_restored: bool,
+    #[serde(default)]
+    pub last_checkpoint_id: u32,
+    #[serde(default)]
+    pub last_checkpoint_distance: f32,
+    #[serde(default)]
+    pub companion_met: bool,
+    #[serde(default)]
+    pub secret_cache_found: bool,
+    #[serde(default)]
+    pub tailwind_tier: TailwindTier,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -55,6 +67,22 @@ pub struct RunnerState {
     pub active_surge_timer: f32,
     #[serde(default)]
     pub relay_restored: bool,
+    #[serde(default)]
+    pub relay_activation_timer: Option<f32>,
+    #[serde(default)]
+    pub last_checkpoint_id: u32,
+    #[serde(default)]
+    pub last_checkpoint_distance: f32,
+    #[serde(default)]
+    pub companion_met: bool,
+    #[serde(default)]
+    pub secret_cache_found: bool,
+    #[serde(default)]
+    pub tailwind_tier: TailwindTier,
+    #[serde(default)]
+    pub unlocked_checkpoints: Vec<u32>,
+    #[serde(default)]
+    pub collected_relics: Vec<ItemKind>,
 }
 
 impl RunnerState {
@@ -81,6 +109,14 @@ impl RunnerState {
             active_multiplier_timer: 0.0,
             active_surge_timer: 0.0,
             relay_restored: false,
+            relay_activation_timer: None,
+            last_checkpoint_id: 0,
+            last_checkpoint_distance: 0.0,
+            companion_met: false,
+            secret_cache_found: false,
+            tailwind_tier: TailwindTier::None,
+            unlocked_checkpoints: vec![0],
+            collected_relics: Vec::new(),
         }
     }
 
@@ -110,6 +146,11 @@ impl RunnerState {
             onboarding_jump_done: self.onboarding_jump_done,
             onboarding_slide_done: self.onboarding_slide_done,
             relay_restored: self.relay_restored,
+            last_checkpoint_id: self.last_checkpoint_id,
+            last_checkpoint_distance: self.last_checkpoint_distance,
+            companion_met: self.companion_met,
+            secret_cache_found: self.secret_cache_found,
+            tailwind_tier: self.tailwind_tier,
         }
     }
 
@@ -129,10 +170,15 @@ impl RunnerState {
         self.onboarding_jump_done = snap.onboarding_jump_done;
         self.onboarding_slide_done = snap.onboarding_slide_done;
         self.relay_restored = snap.relay_restored;
+        self.last_checkpoint_id = snap.last_checkpoint_id;
+        self.last_checkpoint_distance = snap.last_checkpoint_distance;
+        self.companion_met = snap.companion_met;
+        self.secret_cache_found = snap.secret_cache_found;
+        self.tailwind_tier = snap.tailwind_tier;
     }
 
     pub fn start_completion_transition(&mut self, success: bool) {
-        self.transition_remaining_secs = Some(0.30); // 300ms rapid deceleration
+        self.transition_remaining_secs = Some(0.30);
         self.transition_success = success;
     }
 
@@ -143,7 +189,6 @@ impl RunnerState {
     }
 
     pub fn current_prompt(&self) -> Option<&'static str> {
-        // Onboarding prompts
         if !self.onboarding_jump_done && self.distance >= 15.0 && self.distance <= 35.0 {
             Some("jump_prompt")
         } else if !self.onboarding_slide_done && self.distance >= 50.0 && self.distance <= 80.0 {
@@ -158,7 +203,6 @@ impl RunnerState {
             return;
         }
 
-        // Handle completion transition deceleration
         if let Some(ref mut t_rem) = self.transition_remaining_secs {
             *t_rem -= dt;
             self.speed = (self.speed - (self.speed * 8.0 * dt)).max(0.0);
@@ -167,15 +211,20 @@ impl RunnerState {
             }
         }
 
+        if let Some(ref mut t_act) = self.relay_activation_timer {
+            *t_act -= dt;
+            if *t_act <= 0.0 {
+                self.relay_activation_timer = None;
+            }
+        }
+
         self.run_duration += dt;
         let ground_y = self.world.ground_y as f32;
 
-        // Process discrete input
         if let Some(inp) = input {
             self.player.handle_input(inp, ground_y);
         }
 
-        // Update timers
         if self.active_magnet_timer > 0.0 {
             self.active_magnet_timer = (self.active_magnet_timer - dt).max(0.0);
         }
@@ -189,25 +238,22 @@ impl RunnerState {
             self.active_surge_timer = (self.active_surge_timer - dt).max(0.0);
         }
 
-        // Calculate dynamic cruising speed
         let speed_mult = if self.active_surge_timer > 0.0 {
             1.5
         } else {
             1.0
         };
+        let tailwind_bonus = self.tailwind_tier.speed_bonus();
         self.speed = (self.speed + SPEED_ACCELERATION_RATE * dt).min(MAX_FORWARD_SPEED);
-        let effective_speed = self.speed * speed_mult;
+        let effective_speed = (self.speed + tailwind_bonus) * speed_mult;
 
-        // Advance world and player
         let dx = effective_speed * dt;
         self.distance += dx;
         self.world.update(dx);
         self.player.update(dt, ground_y);
 
-        // Update floating indicators
         self.floating_indicators.retain_mut(|ind| ind.update(dt));
 
-        // Check onboarding completion
         if !self.onboarding_jump_done && self.distance > 35.0 {
             self.onboarding_jump_done = true;
         }
@@ -215,36 +261,140 @@ impl RunnerState {
             self.onboarding_slide_done = true;
         }
 
-        // Collision checking
+        self.update_collisions_and_interactions(dt);
+    }
+
+    fn update_collisions_and_interactions(&mut self, dt: f32) {
         let (p_x1, p_y1, p_x2, p_y2) = self.player.bounding_box();
         let scroll_x = self.world.scroll_x;
         let abs_player_x = scroll_x + self.player.x;
-
-        // Magnet attraction
-        let has_magnet = self.active_magnet_timer > 0.0;
-        let magnet_radius = if has_magnet { 18.0 } else { 3.5 };
 
         let mut collected_items = [None; 8];
         let mut collected_count = 0;
         let mut collided = false;
 
+        let magnet_radius = if self.active_magnet_timer > 0.0 {
+            16.0
+        } else {
+            0.0
+        };
+
+        // 1. Wind currents interaction
+        for chunk in self.world.active_chunks() {
+            let chunk_start_x = (chunk.index * CHUNK_WIDTH) as f32;
+            for wind in &chunk.wind_currents {
+                let (w_x1, w_y1, w_x2, w_y2) = wind.bounding_box(chunk_start_x);
+                let screen_w_x1 = w_x1 - scroll_x;
+                let screen_w_x2 = w_x2 - scroll_x;
+
+                if p_x1 < screen_w_x2 && p_x2 > screen_w_x1 && p_y1 < w_y2 && p_y2 > w_y1 {
+                    match wind.kind {
+                        WindKind::Updraft => {
+                            if matches!(
+                                self.player.action,
+                                ActionState::Jumping { .. } | ActionState::Gliding { .. }
+                            ) {
+                                self.player.action = ActionState::Gliding {
+                                    elapsed_secs: 0.0,
+                                    vertical_velocity: -12.0 * wind.strength,
+                                };
+                            }
+                        }
+                        WindKind::TailwindGust => {
+                            self.speed = (self.speed + 8.0 * dt).min(32.0);
+                        }
+                        WindKind::CrosswindChasm => {
+                            if matches!(
+                                self.player.action,
+                                ActionState::Jumping { .. } | ActionState::Gliding { .. }
+                            ) {
+                                self.player.action = ActionState::Gliding {
+                                    elapsed_secs: 0.0,
+                                    vertical_velocity: -6.0 * wind.strength,
+                                };
+                                self.speed = (self.speed + 12.0 * dt).min(34.0);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Landmarks & Checkpoints interaction
         for chunk in self.world.active_chunks_mut() {
             let chunk_start_x = (chunk.index * CHUNK_WIDTH) as f32;
+            for lm in &mut chunk.landmarks {
+                let abs_x = chunk_start_x + lm.rel_x;
+                let screen_x = abs_x - scroll_x;
 
-            // 1. Pickups
+                if (self.player.x - screen_x).abs() < 6.0 {
+                    match &mut lm.kind {
+                        LandmarkKind::CheckpointPylon { id, name_key } => {
+                            if !self.unlocked_checkpoints.contains(id) {
+                                self.unlocked_checkpoints.push(*id);
+                                self.last_checkpoint_id = *id;
+                                self.last_checkpoint_distance = self.distance;
+                                self.player.invulnerable_timer = 1.5;
+                                self.floating_indicators.push(FloatingIndicator::new(
+                                    self.player.x + 1.0,
+                                    self.player.y - 4.5,
+                                    format!("[+] CHECKPOINT: {}", *name_key),
+                                ));
+                            }
+                        }
+                        LandmarkKind::CompanionKael { spoken } => {
+                            if !*spoken {
+                                *spoken = true;
+                                self.companion_met = true;
+                                self.floating_indicators.push(FloatingIndicator::new(
+                                    self.player.x + 1.0,
+                                    self.player.y - 5.5,
+                                    "Kael: 'The Gale Node lies ahead across the rift...'",
+                                ));
+                            }
+                        }
+                        LandmarkKind::SecretCache { opened } => {
+                            if !*opened {
+                                *opened = true;
+                                self.secret_cache_found = true;
+                                self.floating_indicators.push(FloatingIndicator::new(
+                                    self.player.x + 1.0,
+                                    self.player.y - 5.0,
+                                    "SECRET CACHE DISCOVERED!",
+                                ));
+                            }
+                        }
+                        LandmarkKind::RelayNodeConsole { restored } => {
+                            if !*restored {
+                                *restored = true;
+                                self.relay_restored = true;
+                                self.relay_activation_timer = Some(1.5);
+                                self.floating_indicators.push(FloatingIndicator::new(
+                                    self.player.x + 1.0,
+                                    self.player.y - 5.5,
+                                    "RELAY STATION 04 RESTORED!",
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. Items and Pickups
+        for chunk in self.world.active_chunks_mut() {
+            let chunk_start_x = (chunk.index * CHUNK_WIDTH) as f32;
             for item in &mut chunk.items {
                 if item.collected {
                     continue;
                 }
                 let item_abs_x = chunk_start_x + item.rel_x;
 
-                // Magnetic pull
                 if (item_abs_x - abs_player_x).abs() < magnet_radius {
                     let dir = (abs_player_x - item_abs_x).signum();
                     item.rel_x += dir * 25.0 * dt;
                 }
 
-                // Overlap check
                 let screen_x1 = item_abs_x - scroll_x;
                 let screen_x2 = screen_x1 + item.sprite().len() as f32;
                 if self.player.x < screen_x2
@@ -260,7 +410,7 @@ impl RunnerState {
                 }
             }
 
-            // 2. Obstacles
+            // 4. Obstacles
             if self.player.invulnerable_timer <= 0.0 && !collided {
                 for obs in &chunk.obstacles {
                     let (o_x1, o_y1, o_x2, o_y2) = obs.bounding_box(chunk_start_x);
@@ -332,13 +482,37 @@ impl RunnerState {
                     "x2 FLOW MULTIPLIER",
                 ));
             }
+            ItemKind::ResonanceCore => {
+                self.collected_relics.push(ItemKind::ResonanceCore);
+                self.floating_indicators.push(FloatingIndicator::new(
+                    self.player.x + 1.0,
+                    self.player.y - 5.0,
+                    "RESONANCE CORE ACQUIRED",
+                ));
+            }
+            ItemKind::InductionFilament => {
+                self.collected_relics.push(ItemKind::InductionFilament);
+                self.floating_indicators.push(FloatingIndicator::new(
+                    self.player.x + 1.0,
+                    self.player.y - 5.0,
+                    "INDUCTION FILAMENT ACQUIRED",
+                ));
+            }
+            ItemKind::AncientCompass => {
+                self.collected_relics.push(ItemKind::AncientCompass);
+                self.floating_indicators.push(FloatingIndicator::new(
+                    self.player.x + 1.0,
+                    self.player.y - 5.0,
+                    "ANCIENT COMPASS ACQUIRED",
+                ));
+            }
         }
     }
 
-    fn handle_player_collision(&mut self) {
+    pub fn handle_player_collision(&mut self) {
         if self.player.shields > 0 {
             self.player.shields -= 1;
-            self.player.invulnerable_timer = 1.2; // 1.2s post-hit invulnerability
+            self.player.invulnerable_timer = 1.2;
             self.flow_multiplier = 1.0;
             self.floating_indicators.push(FloatingIndicator::new(
                 self.player.x + 1.0,
@@ -346,32 +520,113 @@ impl RunnerState {
                 "SHIELD BROKEN",
             ));
         } else {
-            // Defeat without shields
-            self.is_game_over = true;
+            // Safe respawn at last checkpoint without losing items or discoveries
+            self.player.action = ActionState::Respawning {
+                remaining_secs: 0.5,
+            };
+            self.player.invulnerable_timer = 2.0;
+            self.player.shields = 1;
+            self.distance = self.last_checkpoint_distance;
+            self.world.scroll_x = (self.last_checkpoint_distance - self.player.x).max(0.0);
+            self.player.y = self.world.ground_y as f32;
+            self.flow_multiplier = 1.0;
             self.floating_indicators.push(FloatingIndicator::new(
                 self.player.x + 1.0,
                 self.player.y - 4.5,
-                "CRITICAL IMPACT",
+                "RESPAWN AT CHECKPOINT",
             ));
         }
     }
 
-    /// Renders frame to double-buffered TerminalBuffer.
     pub fn render(&self, buf: &mut Buffer, locale: Locale) {
         let width = buf.width() as usize;
         let height = buf.height() as usize;
         let ground_y = self.world.ground_y;
 
-        // 1. Render multi-layer parallax backdrop (sky, skyline, midground wires, rails)
+        // 1. Render multi-layer parallax backdrop
         self.world
             .parallax
             .render_backdrop(buf, ground_y, self.relay_restored);
 
-        // 2. Render chunk obstacles and items
+        // 2. Interior Gantry Roof for Sector 2
+        let current_sector = sector_for_distance(self.distance);
+        if current_sector == SectorKind::InteriorGantry {
+            let ceiling_y = ground_y.saturating_sub(8);
+            if ceiling_y < height {
+                for x in 0..width {
+                    buf.set_char(
+                        x as u16,
+                        ceiling_y as u16,
+                        '=',
+                        Color::DarkGrey,
+                        Color::Black,
+                    );
+                    if ceiling_y + 1 < height
+                        && (x + (self.world.scroll_x as usize)).is_multiple_of(16)
+                    {
+                        buf.draw_str_styled(
+                            x as u16,
+                            (ceiling_y + 1) as u16,
+                            "[v]",
+                            Style::new(Color::Yellow, Color::Black),
+                        );
+                    }
+                }
+            }
+        }
+
+        // 3. Render wind currents
+        for chunk in self.world.active_chunks() {
+            let chunk_start_x = (chunk.index * CHUNK_WIDTH) as f32;
+            for wind in &chunk.wind_currents {
+                let screen_x = (chunk_start_x + wind.rel_x) - self.world.scroll_x;
+                let base_y = wind.y.round() as usize;
+                let sprites = wind.sprite_lines();
+                for (line_idx, line) in sprites.iter().rev().enumerate() {
+                    let draw_y = base_y.saturating_sub(line_idx + 1);
+                    if screen_x >= -20.0 && (screen_x as usize) < width && draw_y < height {
+                        buf.draw_str_styled(
+                            screen_x.max(0.0) as u16,
+                            draw_y as u16,
+                            line,
+                            Style::new(Color::DarkCyan, Color::Black),
+                        );
+                    }
+                }
+            }
+        }
+
+        // 4. Render landmarks
+        for chunk in self.world.active_chunks() {
+            let chunk_start_x = (chunk.index * CHUNK_WIDTH) as f32;
+            for lm in &chunk.landmarks {
+                let screen_x = (chunk_start_x + lm.rel_x) - self.world.scroll_x;
+                let base_y = lm.y.round() as usize;
+                let sprites = lm.sprite();
+                for (line_idx, line) in sprites.iter().rev().enumerate() {
+                    let draw_y = base_y.saturating_sub(line_idx);
+                    if screen_x >= 0.0 && (screen_x as usize) < width && draw_y < height {
+                        let color = match &lm.kind {
+                            LandmarkKind::CheckpointPylon { .. } => Color::Green,
+                            LandmarkKind::CompanionKael { .. } => Color::Yellow,
+                            LandmarkKind::SecretCache { .. } => Color::Magenta,
+                            LandmarkKind::RelayNodeConsole { .. } => Color::Cyan,
+                        };
+                        buf.draw_str_styled(
+                            screen_x as u16,
+                            draw_y as u16,
+                            line,
+                            Style::new(color, Color::Black).bold(),
+                        );
+                    }
+                }
+            }
+        }
+
+        // 5. Render chunk obstacles and items
         for chunk in self.world.active_chunks() {
             let chunk_start_x = (chunk.index * CHUNK_WIDTH) as f32;
 
-            // Items
             for item in &chunk.items {
                 if item.collected {
                     continue;
@@ -387,6 +642,9 @@ impl RunnerState {
                         ItemKind::WindShield => Color::Green,
                         ItemKind::ShardMagnet => Color::Blue,
                         ItemKind::FlowMultiplier => Color::Magenta,
+                        ItemKind::ResonanceCore => Color::Cyan,
+                        ItemKind::InductionFilament => Color::White,
+                        ItemKind::AncientCompass => Color::Yellow,
                     };
                     buf.draw_str_styled(
                         screen_x as u16,
@@ -397,7 +655,6 @@ impl RunnerState {
                 }
             }
 
-            // Obstacles
             for obs in &chunk.obstacles {
                 let screen_x = (chunk_start_x + obs.rel_x) - self.world.scroll_x;
                 let base_y = match obs.kind {
@@ -426,7 +683,23 @@ impl RunnerState {
             }
         }
 
-        // 3. Render Player multi-cell ASCII sprite
+        // 6. Relay Restoration Wave Sequence
+        if let Some(t) = self.relay_activation_timer {
+            let phase = ((1.5 - t) * 8.0) as usize;
+            let wave_symbols = ["~", "*", "+", "#", "*"];
+            for x in 0..width {
+                let sym = wave_symbols[(x / 4 + phase) % wave_symbols.len()];
+                buf.set_char(
+                    x as u16,
+                    ground_y.saturating_sub(1) as u16,
+                    sym.chars().next().unwrap(),
+                    Color::Cyan,
+                    Color::Black,
+                );
+            }
+        }
+
+        // 7. Render Player
         let player_sprite = self.player.current_sprite();
         let base_y = self.player.y.round() as usize;
         let is_invulnerable = self.player.invulnerable_timer > 0.0;
@@ -450,7 +723,7 @@ impl RunnerState {
             }
         }
 
-        // 4. Render floating text indicators
+        // 8. Render floating indicators
         for ind in &self.floating_indicators {
             let draw_x = ind.x.round() as u16;
             let draw_y = ind.y.round() as u16;
@@ -464,8 +737,7 @@ impl RunnerState {
             }
         }
 
-        // 5. Minimal unobtrusive Top HUD
-        // [ DIST 240m | SPD 22 | FLOW x2.5 | SHARDS 38 | SHIELDS (O)(O) ]
+        // 9. Minimal Atmospheric Top HUD
         let hud_dist_label = t("hud_distance", locale);
         let hud_spd_label = t("hud_speed", locale);
         let hud_flow_label = t("hud_multiplier", locale);
@@ -478,8 +750,14 @@ impl RunnerState {
             _ => "(O)(O)(O)",
         };
 
+        let tailwind_label = if self.tailwind_tier != TailwindTier::None {
+            format!(" │ {}", self.tailwind_tier.label())
+        } else {
+            String::new()
+        };
+
         let hud_text = format!(
-            " {} {:04}m │ {} {:02} │ {} x{:.1} │ {} {:03} │ {}",
+            " {} {:04}m │ {} {:02} │ {} x{:.1} │ {} {:03} │ {}{}",
             hud_dist_label,
             self.distance as u32,
             hud_spd_label,
@@ -488,23 +766,24 @@ impl RunnerState {
             self.flow_multiplier,
             hud_shards_label,
             self.shards_collected,
-            shield_icons
+            shield_icons,
+            tailwind_label,
         );
 
         buf.draw_str_styled(
             1,
             0,
             &hud_text,
-            Style::new(Color::White, Color::DarkGrey).bold(),
+            Style::new(Color::White, Color::Black).bold(),
         );
 
-        // 6. Onboarding Prompt (if active)
+        // Optional onboarding prompt
         if let Some(prompt_key) = self.current_prompt() {
             let prompt_text = t(prompt_key, locale);
-            let px = (width.saturating_sub(prompt_text.len())) / 2;
+            let prompt_x = (width.saturating_sub(prompt_text.len())) / 2;
             buf.draw_str_styled(
-                px as u16,
-                (ground_y.saturating_sub(9)) as u16,
+                prompt_x as u16,
+                2,
                 prompt_text,
                 Style::new(Color::Yellow, Color::Black).bold(),
             );

@@ -115,11 +115,17 @@ fn test_visual_qa_large_terminal_236x53() {
     // Verify non-empty content across all vertical bands in 236x53
     // Sky band (rows 1..8)
     let sky_has_content = (1..8).any(|y| lines[y].chars().any(|c| c != ' '));
-    assert!(sky_has_content, "Sky band must contain wind/atmospheric art");
+    assert!(
+        sky_has_content,
+        "Sky band must contain wind/atmospheric art"
+    );
 
     // Distant horizon band (rows 9..24)
     let far_has_content = (9..24).any(|y| lines[y].chars().any(|c| c != ' '));
-    assert!(far_has_content, "Far horizon must contain colossal tower/arch silhouettes");
+    assert!(
+        far_has_content,
+        "Far horizon must contain colossal tower/arch silhouettes"
+    );
 
     // Midground band (rows 25..45)
     let mid_has_content = (25..45).any(|y| lines[y].chars().any(|c| c != ' '));
@@ -127,5 +133,8 @@ fn test_visual_qa_large_terminal_236x53() {
 
     // Ground and pier drop (rows 46..52)
     let pier_has_content = (48..53).any(|y| lines[y].chars().any(|c| c != ' '));
-    assert!(pier_has_content, "Lower region must contain viaduct trusses and pier drops");
+    assert!(
+        pier_has_content,
+        "Lower region must contain viaduct trusses and pier drops"
+    );
 }

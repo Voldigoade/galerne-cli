@@ -14,6 +14,12 @@ pub enum ItemKind {
     ShardMagnet,
     /// Flow score multiplier: [x2]
     FlowMultiplier,
+    /// Persistent ancient relic: [<#>]
+    ResonanceCore,
+    /// Persistent conduit component: [~|~]
+    InductionFilament,
+    /// Persistent ancient compass: [(*)]
+    AncientCompass,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -41,6 +47,9 @@ impl PickupItem {
             ItemKind::WindShield => "(O)",
             ItemKind::ShardMagnet => "[+]",
             ItemKind::FlowMultiplier => "[x2]",
+            ItemKind::ResonanceCore => "[<#>]",
+            ItemKind::InductionFilament => "[~|~]",
+            ItemKind::AncientCompass => "[(*)]",
         }
     }
 

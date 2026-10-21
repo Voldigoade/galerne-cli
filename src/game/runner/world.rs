@@ -5,14 +5,62 @@ use serde::{Deserialize, Serialize};
 use super::items::{ItemKind, PickupItem};
 use super::obstacles::{Obstacle, ObstacleKind};
 use super::parallax::ParallaxEngine;
+use super::wind::{WindCurrent, WindKind};
 
 pub const CHUNK_WIDTH: usize = 50;
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum LandmarkKind {
+    CheckpointPylon { id: u32, name_key: String },
+    CompanionKael { spoken: bool },
+    SecretCache { opened: bool },
+    RelayNodeConsole { restored: bool },
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Landmark {
+    pub rel_x: f32,
+    pub y: f32,
+    pub kind: LandmarkKind,
+}
+
+impl Landmark {
+    pub fn new(rel_x: f32, y: f32, kind: LandmarkKind) -> Self {
+        Self { rel_x, y, kind }
+    }
+
+    pub fn sprite(&self) -> &'static [&'static str] {
+        match &self.kind {
+            LandmarkKind::CheckpointPylon { .. } => &[" [+] ", "/===\\", "| # |", "|---|"],
+            LandmarkKind::CompanionKael { .. } => &[" ,(^)  ", "<{#}>~ ", "==[#]==="],
+            LandmarkKind::SecretCache { .. } => &[" [CACHE] ", "==[***]=="],
+            LandmarkKind::RelayNodeConsole { .. } => {
+                &["   /|\\   ", "  [|04|] ", " /======\\", " |[====]|"]
+            }
+        }
+    }
+
+    pub fn bounding_box(&self, chunk_start_x: f32) -> (f32, f32, f32, f32) {
+        let abs_x = chunk_start_x + self.rel_x;
+        let w = match &self.kind {
+            LandmarkKind::CheckpointPylon { .. } => 5.0,
+            LandmarkKind::CompanionKael { .. } => 8.0,
+            LandmarkKind::SecretCache { .. } => 9.0,
+            LandmarkKind::RelayNodeConsole { .. } => 9.0,
+        };
+        (abs_x - 1.0, self.y - 4.0, abs_x + w + 1.0, self.y + 1.0)
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Chunk {
     pub index: usize,
     pub obstacles: Vec<Obstacle>,
     pub items: Vec<PickupItem>,
+    #[serde(default)]
+    pub wind_currents: Vec<WindCurrent>,
+    #[serde(default)]
+    pub landmarks: Vec<Landmark>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -39,7 +87,6 @@ impl ChunkWorld {
             parallax: ParallaxEngine::default(),
         };
 
-        // Pre-generate initial chunks to cover the viewport
         world.ensure_chunks_generated((viewport_width + CHUNK_WIDTH * 2) as f32);
         world
     }
@@ -62,11 +109,9 @@ impl ChunkWorld {
         self.scroll_x += dx;
         self.parallax.update(dx);
 
-        // Generate ahead to cover lookahead
         let lookahead_x = self.scroll_x + (self.viewport_width as f32) + (CHUNK_WIDTH as f32 * 2.0);
         self.ensure_chunks_generated(lookahead_x);
 
-        // Prune chunks that have moved completely behind the viewport (left edge < scroll_x - 20)
         let prune_cutoff_x = self.scroll_x - 20.0;
         self.chunks.retain(|c| {
             let chunk_end_x = ((c.index + 1) * CHUNK_WIDTH) as f32;
@@ -93,63 +138,241 @@ impl ChunkWorld {
         let ground_y = self.ground_y as f32;
         let mut obstacles = Vec::new();
         let mut items = Vec::new();
+        let mut wind_currents = Vec::new();
+        let mut landmarks = Vec::new();
 
-        // Deterministic pseudo-random sequence for this chunk
-        let mut rng = ChunkRng::new(self.seed, index as u64);
-
-        if index == 0 {
-            // First chunk: safe warm-up zone with occasional welcome shards
-            items.push(PickupItem::new(25.0, ground_y - 1.0, ItemKind::GaleShard));
-            items.push(PickupItem::new(35.0, ground_y - 1.0, ItemKind::GaleShard));
-        } else if index == 1 {
-            // Early onboarding chunk: single low barrier to introduce Jump
-            obstacles.push(Obstacle::new(28.0, ground_y, ObstacleKind::LowBarrier));
-            // Airborne shards reward clean jump
-            items.push(PickupItem::new(28.5, ground_y - 5.0, ItemKind::GaleShard));
-        } else if index == 2 {
-            // Early onboarding chunk: single overhead conduit to introduce Slide
-            obstacles.push(Obstacle::new(28.0, ground_y, ObstacleKind::OverheadPipe));
-            // Ground shard placed directly beneath the overhead conduit
-            items.push(PickupItem::new(30.0, ground_y, ItemKind::GaleShard));
-        } else {
-            // Dynamic obstacle and pickup placement with guaranteed reaction gaps
-            let mut cursor_x = 10.0;
-            while cursor_x < (CHUNK_WIDTH as f32 - 15.0) {
-                let r = rng.next_f32();
-                let obstacle_kind = if r < 0.45 {
-                    ObstacleKind::LowBarrier
-                } else if r < 0.80 {
-                    ObstacleKind::OverheadPipe
-                } else {
-                    ObstacleKind::Pylon
-                };
-
-                obstacles.push(Obstacle::new(cursor_x, ground_y, obstacle_kind));
-
-                // Place pickup item before or above obstacle
-                let item_roll = rng.next_f32();
-                if item_roll < 0.40 {
-                    let kind = if item_roll < 0.25 {
-                        ItemKind::GaleShard
-                    } else if item_roll < 0.32 {
-                        ItemKind::WindShield
-                    } else if item_roll < 0.37 {
-                        ItemKind::SpeedSurge
-                    } else {
-                        ItemKind::FlowMultiplier
-                    };
-
-                    let item_y = match obstacle_kind {
-                        ObstacleKind::LowBarrier => ground_y - 4.5, // Airborne rewards jumping
-                        ObstacleKind::OverheadPipe => ground_y,     // Low rewards sliding
-                        ObstacleKind::Pylon => ground_y - 1.0,
-                    };
-                    items.push(PickupItem::new(cursor_x + 1.0, item_y, kind));
+        match index {
+            0 => {
+                landmarks.push(Landmark::new(
+                    4.0,
+                    ground_y,
+                    LandmarkKind::CheckpointPylon {
+                        id: 0,
+                        name_key: "cp_departure".to_string(),
+                    },
+                ));
+                items.push(PickupItem::new(25.0, ground_y - 1.0, ItemKind::GaleShard));
+                items.push(PickupItem::new(38.0, ground_y - 1.0, ItemKind::GaleShard));
+            }
+            1 => {
+                obstacles.push(Obstacle::new(28.0, ground_y, ObstacleKind::LowBarrier));
+                items.push(PickupItem::new(28.5, ground_y - 5.0, ItemKind::GaleShard));
+            }
+            2 => {
+                obstacles.push(Obstacle::new(28.0, ground_y, ObstacleKind::OverheadPipe));
+                items.push(PickupItem::new(30.0, ground_y, ItemKind::GaleShard));
+            }
+            3 => {
+                wind_currents.push(WindCurrent::new(
+                    18.0,
+                    ground_y,
+                    14.0,
+                    8.0,
+                    WindKind::Updraft,
+                ));
+                items.push(PickupItem::new(22.0, ground_y - 5.0, ItemKind::GaleShard));
+                items.push(PickupItem::new(26.0, ground_y - 6.5, ItemKind::GaleShard));
+                items.push(PickupItem::new(30.0, ground_y - 5.0, ItemKind::WindShield));
+            }
+            4 => {
+                obstacles.push(Obstacle::new(18.0, ground_y, ObstacleKind::LowBarrier));
+                items.push(PickupItem::new(28.0, ground_y - 1.0, ItemKind::GaleShard));
+                obstacles.push(Obstacle::new(38.0, ground_y, ObstacleKind::LowBarrier));
+            }
+            5 => {
+                landmarks.push(Landmark::new(
+                    10.0,
+                    ground_y,
+                    LandmarkKind::CheckpointPylon {
+                        id: 1,
+                        name_key: "cp_shanty_outpost".to_string(),
+                    },
+                ));
+                wind_currents.push(WindCurrent::new(
+                    25.0,
+                    ground_y,
+                    18.0,
+                    4.0,
+                    WindKind::TailwindGust,
+                ));
+                items.push(PickupItem::new(35.0, ground_y - 1.0, ItemKind::SpeedSurge));
+            }
+            6 => {
+                obstacles.push(Obstacle::new(25.0, ground_y, ObstacleKind::OverheadPipe));
+                items.push(PickupItem::new(38.0, ground_y, ItemKind::GaleShard));
+            }
+            7 => {
+                obstacles.push(Obstacle::new(18.0, ground_y, ObstacleKind::LowBarrier));
+                obstacles.push(Obstacle::new(35.0, ground_y, ObstacleKind::OverheadPipe));
+                items.push(PickupItem::new(35.0, ground_y, ItemKind::GaleShard));
+            }
+            8 => {
+                landmarks.push(Landmark::new(
+                    42.0,
+                    ground_y,
+                    LandmarkKind::SecretCache { opened: false },
+                ));
+                obstacles.push(Obstacle::new(28.0, ground_y, ObstacleKind::OverheadPipe));
+                items.push(PickupItem::new(
+                    42.0,
+                    ground_y - 1.0,
+                    ItemKind::AncientCompass,
+                ));
+                items.push(PickupItem::new(
+                    45.0,
+                    ground_y - 1.0,
+                    ItemKind::InductionFilament,
+                ));
+            }
+            9 => {
+                obstacles.push(Obstacle::new(20.0, ground_y, ObstacleKind::Pylon));
+                obstacles.push(Obstacle::new(38.0, ground_y, ObstacleKind::LowBarrier));
+                items.push(PickupItem::new(
+                    29.0,
+                    ground_y - 1.0,
+                    ItemKind::FlowMultiplier,
+                ));
+            }
+            10 => {
+                landmarks.push(Landmark::new(
+                    12.0,
+                    ground_y,
+                    LandmarkKind::CheckpointPylon {
+                        id: 2,
+                        name_key: "cp_shaft_airlock".to_string(),
+                    },
+                ));
+                items.push(PickupItem::new(30.0, ground_y - 1.0, ItemKind::GaleShard));
+            }
+            11 => {
+                items.push(PickupItem::new(20.0, ground_y - 1.0, ItemKind::GaleShard));
+                items.push(PickupItem::new(35.0, ground_y - 1.0, ItemKind::GaleShard));
+            }
+            12 => {
+                obstacles.push(Obstacle::new(25.0, ground_y, ObstacleKind::LowBarrier));
+                items.push(PickupItem::new(35.0, ground_y - 1.0, ItemKind::WindShield));
+            }
+            13 => {
+                wind_currents.push(WindCurrent::new(
+                    15.0,
+                    ground_y,
+                    16.0,
+                    10.0,
+                    WindKind::Updraft,
+                ));
+                items.push(PickupItem::new(22.0, ground_y - 6.0, ItemKind::GaleShard));
+                items.push(PickupItem::new(
+                    28.0,
+                    ground_y - 8.0,
+                    ItemKind::FlowMultiplier,
+                ));
+            }
+            14 => {
+                wind_currents.push(WindCurrent::new(
+                    10.0,
+                    ground_y,
+                    25.0,
+                    4.0,
+                    WindKind::TailwindGust,
+                ));
+                obstacles.push(Obstacle::new(32.0, ground_y, ObstacleKind::LowBarrier));
+                items.push(PickupItem::new(38.0, ground_y - 1.0, ItemKind::GaleShard));
+            }
+            15 => {
+                obstacles.push(Obstacle::new(22.0, ground_y, ObstacleKind::OverheadPipe));
+                items.push(PickupItem::new(32.0, ground_y, ItemKind::GaleShard));
+            }
+            16 => {
+                landmarks.push(Landmark::new(
+                    25.0,
+                    ground_y,
+                    LandmarkKind::CompanionKael { spoken: false },
+                ));
+                items.push(PickupItem::new(15.0, ground_y - 1.0, ItemKind::GaleShard));
+            }
+            17 => {
+                landmarks.push(Landmark::new(
+                    35.0,
+                    ground_y,
+                    LandmarkKind::CheckpointPylon {
+                        id: 3,
+                        name_key: "cp_high_roost".to_string(),
+                    },
+                ));
+                items.push(PickupItem::new(20.0, ground_y - 1.0, ItemKind::GaleShard));
+            }
+            18 => {
+                wind_currents.push(WindCurrent::new(
+                    8.0,
+                    ground_y,
+                    35.0,
+                    10.0,
+                    WindKind::CrosswindChasm,
+                ));
+                items.push(PickupItem::new(18.0, ground_y - 5.0, ItemKind::GaleShard));
+                items.push(PickupItem::new(28.0, ground_y - 6.5, ItemKind::GaleShard));
+                items.push(PickupItem::new(38.0, ground_y - 5.0, ItemKind::GaleShard));
+            }
+            19 => {
+                obstacles.push(Obstacle::new(25.0, ground_y, ObstacleKind::LowBarrier));
+                items.push(PickupItem::new(38.0, ground_y - 1.0, ItemKind::WindShield));
+            }
+            20 => {
+                obstacles.push(Obstacle::new(26.0, ground_y, ObstacleKind::OverheadPipe));
+                items.push(PickupItem::new(26.0, ground_y, ItemKind::GaleShard));
+            }
+            21 => {
+                obstacles.push(Obstacle::new(20.0, ground_y, ObstacleKind::LowBarrier));
+                obstacles.push(Obstacle::new(38.0, ground_y, ObstacleKind::LowBarrier));
+                items.push(PickupItem::new(29.0, ground_y - 5.0, ItemKind::GaleShard));
+            }
+            22 => {
+                wind_currents.push(WindCurrent::new(
+                    18.0,
+                    ground_y,
+                    14.0,
+                    8.0,
+                    WindKind::Updraft,
+                ));
+                items.push(PickupItem::new(
+                    24.0,
+                    ground_y - 6.0,
+                    ItemKind::ResonanceCore,
+                ));
+            }
+            23 => {
+                obstacles.push(Obstacle::new(25.0, ground_y, ObstacleKind::Pylon));
+                items.push(PickupItem::new(38.0, ground_y - 1.0, ItemKind::SpeedSurge));
+            }
+            24 => {
+                landmarks.push(Landmark::new(
+                    25.0,
+                    ground_y,
+                    LandmarkKind::RelayNodeConsole { restored: false },
+                ));
+                landmarks.push(Landmark::new(
+                    10.0,
+                    ground_y,
+                    LandmarkKind::CheckpointPylon {
+                        id: 4,
+                        name_key: "cp_relay_node".to_string(),
+                    },
+                ));
+            }
+            _ => {
+                let mut rng = ChunkRng::new(self.seed, index as u64);
+                wind_currents.push(WindCurrent::new(
+                    10.0,
+                    ground_y,
+                    25.0,
+                    4.0,
+                    WindKind::TailwindGust,
+                ));
+                items.push(PickupItem::new(15.0, ground_y - 1.0, ItemKind::GaleShard));
+                items.push(PickupItem::new(30.0, ground_y - 1.0, ItemKind::GaleShard));
+                if rng.next_f32() < 0.35 {
+                    obstacles.push(Obstacle::new(35.0, ground_y, ObstacleKind::LowBarrier));
                 }
-
-                // Advance cursor by at least 16.0 columns (guaranteed reaction window)
-                let step = 16.0 + (rng.next_f32() * 14.0);
-                cursor_x += step;
             }
         }
 
@@ -157,11 +380,13 @@ impl ChunkWorld {
             index,
             obstacles,
             items,
+            wind_currents,
+            landmarks,
         }
     }
 }
 
-/// Lightweight deterministic 64-bit linear congruential generator for procedural chunk derivation.
+/// Deterministic 64-bit linear congruential generator for procedural chunk derivation.
 struct ChunkRng {
     state: u64,
 }
