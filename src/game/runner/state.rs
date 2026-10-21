@@ -2,6 +2,7 @@
 //! collision avoidance, pickups, a compact HUD, and deterministic resumption.
 
 use serde::{Deserialize, Serialize};
+use unicode_width::UnicodeWidthStr;
 
 use super::action::{ActionState, PlayerInput};
 use super::items::{FloatingIndicator, ItemKind};
@@ -914,7 +915,7 @@ impl RunnerState {
 
         if let Some(prompt_key) = self.current_prompt() {
             let prompt_text = t(prompt_key, locale);
-            let prompt_x = (width.saturating_sub(prompt_text.len())) / 2;
+            let prompt_x = (width.saturating_sub(prompt_text.width())) / 2;
             buf.draw_str_styled(
                 prompt_x as u16,
                 2,

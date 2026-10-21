@@ -1,6 +1,7 @@
 //! Cell and buffer definitions for low-overhead double-buffered terminal rendering.
 
 pub use crossterm::style::Color;
+use unicode_width::UnicodeWidthChar;
 
 /// Visual styling attributes for a terminal cell.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -50,6 +51,8 @@ impl Style {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Cell {
     pub ch: char,
+    /// Terminal columns occupied; zero marks a continuation cell for a wide glyph.
+    pub width: u8,
     pub fg: Color,
     pub bg: Color,
     pub bold: bool,
@@ -61,6 +64,7 @@ impl Default for Cell {
     fn default() -> Self {
         Self {
             ch: ' ',
+            width: 1,
             fg: Color::Reset,
             bg: Color::Reset,
             bold: false,
@@ -72,14 +76,8 @@ impl Default for Cell {
 
 impl Cell {
     pub fn new(ch: char, style: Style) -> Self {
-        Self {
-            ch,
-            fg: style.fg,
-            bg: style.bg,
-            bold: style.bold,
-            dim: style.dim,
-            invert: style.invert,
-        }
+        let (ch, width) = display_glyph(ch);
+        make_cell(ch, width, style)
     }
 }
 
@@ -139,48 +137,115 @@ impl Buffer {
     /// Sets the cell at `(x, y)` if within bounds.
     #[inline]
     pub fn set(&mut self, x: u16, y: u16, cell: Cell) {
-        if let Some(c) = self.get_mut(x, y) {
-            *c = cell;
-        }
+        self.set_glyph(
+            x,
+            y,
+            cell.ch,
+            Style {
+                fg: cell.fg,
+                bg: cell.bg,
+                bold: cell.bold,
+                dim: cell.dim,
+                invert: cell.invert,
+            },
+        );
     }
 
     /// Sets a character with foreground and background colors at `(x, y)`.
     #[inline]
     pub fn set_char(&mut self, x: u16, y: u16, ch: char, fg: Color, bg: Color) {
-        if let Some(c) = self.get_mut(x, y) {
-            c.ch = ch;
-            c.fg = fg;
-            c.bg = bg;
-            c.bold = false;
-            c.dim = false;
-            c.invert = false;
-        }
+        self.set_glyph(x, y, ch, Style::new(fg, bg));
     }
 
     /// Sets a formatted character with style at `(x, y)`.
     #[inline]
     pub fn set_styled(&mut self, x: u16, y: u16, ch: char, style: Style) {
-        if let Some(c) = self.get_mut(x, y) {
-            c.ch = ch;
-            c.fg = style.fg;
-            c.bg = style.bg;
-            c.bold = style.bold;
-            c.dim = style.dim;
-            c.invert = style.invert;
-        }
+        self.set_glyph(x, y, ch, style);
     }
 
     /// Draws a string horizontally starting at `(x, y)`, clipping at the boundary.
     pub fn draw_str(&mut self, x: u16, y: u16, s: &str, fg: Color, bg: Color) {
-        for (cur_x, ch) in (x..self.width).zip(s.chars()) {
-            self.set_char(cur_x, y, ch, fg, bg);
-        }
+        self.draw_text(x, y, s, Style::new(fg, bg));
     }
 
     /// Draws a styled string horizontally starting at `(x, y)`.
     pub fn draw_str_styled(&mut self, x: u16, y: u16, s: &str, style: Style) {
-        for (cur_x, ch) in (x..self.width).zip(s.chars()) {
-            self.set_styled(cur_x, y, ch, style);
+        self.draw_text(x, y, s, style);
+    }
+
+    fn draw_text(&mut self, x: u16, y: u16, text: &str, style: Style) {
+        let mut column = x;
+        for ch in text.chars() {
+            let (ch, width) = display_glyph(ch);
+            if width == 0 {
+                continue;
+            }
+            if column.saturating_add(width as u16) > self.width {
+                break;
+            }
+            self.set_glyph(column, y, ch, style);
+            column += width as u16;
+        }
+    }
+
+    fn set_glyph(&mut self, x: u16, y: u16, ch: char, style: Style) {
+        let (ch, width) = display_glyph(ch);
+        if width == 0 || x.saturating_add(width as u16) > self.width || y >= self.height {
+            return;
+        }
+
+        if self.get(x, y).is_some_and(|cell| cell.width == 1) && width == 1 {
+            if let Some(cell) = self.get_mut(x, y) {
+                *cell = make_cell(ch, width, style);
+            }
+            return;
+        }
+
+        self.clear_glyph_at(x, y);
+        for offset in 1..width {
+            self.clear_glyph_at(x + offset as u16, y);
+        }
+
+        if let Some(cell) = self.get_mut(x, y) {
+            *cell = make_cell(ch, width, style);
+        }
+
+        for offset in 1..width {
+            if let Some(cell) = self.get_mut(x + offset as u16, y) {
+                *cell = make_cell(' ', 0, style);
+            }
+        }
+    }
+
+    fn clear_glyph_at(&mut self, x: u16, y: u16) {
+        let Some(cell) = self.get(x, y).copied() else {
+            return;
+        };
+
+        let mut lead_x = x;
+        if cell.width == 0 {
+            for offset in 1..=2u16 {
+                let Some(candidate_x) = x.checked_sub(offset) else {
+                    continue;
+                };
+                if self
+                    .get(candidate_x, y)
+                    .is_some_and(|candidate| candidate.width > offset as u8)
+                {
+                    lead_x = candidate_x;
+                    break;
+                }
+            }
+        }
+
+        let width = self
+            .get(lead_x, y)
+            .map(|lead| lead.width.max(1))
+            .unwrap_or(1);
+        for offset in 0..width {
+            if let Some(cell) = self.get_mut(lead_x + offset as u16, y) {
+                *cell = Cell::default();
+            }
         }
     }
 
@@ -229,5 +294,30 @@ impl Buffer {
                 Some((x, y, current))
             })
         })
+    }
+}
+
+fn display_glyph(ch: char) -> (char, u8) {
+    if ch.is_ascii() {
+        return (ch, 1);
+    }
+
+    match UnicodeWidthChar::width(ch) {
+        Some(0) => (' ', 0),
+        Some(1) => (ch, 1),
+        Some(2) => (ch, 2),
+        Some(_) | None => ('�', 1),
+    }
+}
+
+fn make_cell(ch: char, width: u8, style: Style) -> Cell {
+    Cell {
+        ch,
+        width,
+        fg: style.fg,
+        bg: style.bg,
+        bold: style.bold,
+        dim: style.dim,
+        invert: style.invert,
     }
 }

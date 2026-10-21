@@ -19,6 +19,7 @@ crc32fast = "1.4"
 ureq = { version = "3.4", default-features = false, features = ["rustls"] }
 sha2 = { version = "0.10", default-features = false }
 getrandom = { version = "0.2", default-features = false }
+unicode-width = "0.2.2"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

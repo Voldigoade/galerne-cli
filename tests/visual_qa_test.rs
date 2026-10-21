@@ -14,7 +14,9 @@ fn buffer_to_string(buf: &Buffer) -> String {
     for y in 0..buf.height() {
         for x in 0..buf.width() {
             let cell = buf.get(x, y).unwrap();
-            out.push(cell.ch);
+            if cell.width != 0 {
+                out.push(cell.ch);
+            }
         }
         out.push('\n');
     }
@@ -76,6 +78,9 @@ fn cache_action_prompt_is_rendered_in_each_supported_locale() {
             buffer_to_string(&buf).contains(expected),
             "Missing contextual prompt for {locale:?}"
         );
+        if locale == Locale::ZhCn {
+            assert_eq!(buf.get(36, 2).unwrap().ch, 'E');
+        }
     }
 }
 

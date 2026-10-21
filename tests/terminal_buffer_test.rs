@@ -1,4 +1,4 @@
-use galerne::terminal::buffer::{Buffer, Color};
+use galerne::terminal::buffer::{Buffer, Cell, Color, Style};
 
 #[test]
 fn test_buffer_initialization_and_indexing() {
@@ -59,4 +59,48 @@ fn test_buffer_resize_preserves_or_resets() {
     buf.resize(20, 15);
     assert_eq!(buf.width(), 20);
     assert_eq!(buf.height(), 15);
+}
+
+#[test]
+fn test_draw_string_advances_by_terminal_columns_for_wide_glyphs() {
+    let mut buf = Buffer::new(8, 1);
+    buf.draw_str(0, 0, "A中B", Color::White, Color::Reset);
+
+    assert_eq!(buf.get(0, 0).unwrap().ch, 'A');
+    assert_eq!(buf.get(1, 0).unwrap().ch, '中');
+    assert_eq!(buf.get(1, 0).unwrap().width, 2);
+    assert_eq!(buf.get(2, 0).unwrap().width, 0);
+    assert_eq!(buf.get(3, 0).unwrap().ch, 'B');
+}
+
+#[test]
+fn test_wide_glyphs_are_clipped_without_partial_output() {
+    let mut buf = Buffer::new(3, 1);
+    buf.draw_str(2, 0, "中", Color::White, Color::Reset);
+
+    assert_eq!(buf.get(2, 0).unwrap().ch, ' ');
+    assert_eq!(buf.get(2, 0).unwrap().width, 1);
+}
+
+#[test]
+fn test_overwriting_a_wide_glyph_continuation_clears_its_lead_cell() {
+    let mut buf = Buffer::new(5, 1);
+    buf.draw_str(0, 0, "A中B", Color::White, Color::Reset);
+
+    buf.set_char(2, 0, 'X', Color::Yellow, Color::Reset);
+
+    assert_eq!(buf.get(1, 0).unwrap().ch, ' ');
+    assert_eq!(buf.get(1, 0).unwrap().width, 1);
+    assert_eq!(buf.get(2, 0).unwrap().ch, 'X');
+    assert_eq!(buf.get(3, 0).unwrap().ch, 'B');
+}
+
+#[test]
+fn test_setting_a_wide_cell_reserves_its_second_column() {
+    let mut buf = Buffer::new(4, 1);
+    buf.set(1, 0, Cell::new('中', Style::new(Color::Cyan, Color::Reset)));
+
+    assert_eq!(buf.get(1, 0).unwrap().ch, '中');
+    assert_eq!(buf.get(1, 0).unwrap().width, 2);
+    assert_eq!(buf.get(2, 0).unwrap().width, 0);
 }

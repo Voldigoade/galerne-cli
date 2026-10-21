@@ -2,6 +2,7 @@
 
 use std::thread;
 use std::time::Duration;
+use unicode_width::UnicodeWidthStr;
 
 use crate::terminal::buffer::{Buffer, Color, Style};
 use crate::terminal::engine::Engine;
@@ -167,7 +168,7 @@ fn draw_centered_in_box(
     color: Color,
     bold: bool,
 ) {
-    let text_width = text.chars().count().min(u16::MAX as usize) as u16;
+    let text_width = text.width().min(u16::MAX as usize) as u16;
     let x = start_x + (box_width.saturating_sub(text_width)) / 2;
     let style = Style::new(color, Color::Reset);
     buffer.draw_str_styled(x, y, text, if bold { style.bold() } else { style });
@@ -231,7 +232,10 @@ mod tests {
             let rendered = (0..buffer.height())
                 .map(|y| {
                     (0..buffer.width())
-                        .map(|x| buffer.get(x, y).unwrap().ch)
+                        .filter_map(|x| {
+                            let cell = buffer.get(x, y).unwrap();
+                            (cell.width != 0).then_some(cell.ch)
+                        })
                         .collect::<String>()
                 })
                 .collect::<Vec<_>>()
@@ -239,6 +243,9 @@ mod tests {
 
             for text in expected {
                 assert!(rendered.contains(text), "Missing {text:?} for {locale:?}");
+            }
+            if locale == Locale::ZhCn {
+                assert_eq!(buffer.get(26, 7).unwrap().ch, '任');
             }
         }
     }

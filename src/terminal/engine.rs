@@ -8,6 +8,7 @@ use crossterm::event::{self, Event};
 use crossterm::style::{Color, Print, ResetColor, SetBackgroundColor, SetForegroundColor};
 use crossterm::terminal;
 use crossterm::QueueableCommand;
+use unicode_width::UnicodeWidthStr;
 
 use super::buffer::Buffer;
 use crate::ui::i18n::{format_message, t, Locale};
@@ -89,43 +90,13 @@ impl Engine {
     /// Compares `current` against `previous`, emits required ANSI sequences,
     /// flushes to standard output, and copies `current` into `previous`.
     pub fn flush(&mut self) -> io::Result<()> {
-        let mut last_x = u16::MAX;
-        let mut last_y = u16::MAX;
-
-        let writer = &mut self.writer;
-        let cur_fg = &mut self.current_fg;
-        let cur_bg = &mut self.current_bg;
-
-        for (x, y, cell) in self.current.diff(&self.previous) {
-            // Reposition cursor only if not contiguous
-            if x != last_x || y != last_y {
-                writer.queue(MoveTo(x, y))?;
-            }
-
-            if cell.fg != *cur_fg {
-                writer.queue(SetForegroundColor(cell.fg))?;
-                *cur_fg = cell.fg;
-            }
-            if cell.bg != *cur_bg {
-                writer.queue(SetBackgroundColor(cell.bg))?;
-                *cur_bg = cell.bg;
-            }
-
-            writer.queue(Print(cell.ch))?;
-
-            last_x = x.saturating_add(1);
-            last_y = y;
-        }
-
-        // Reset styling and flush buffered bytes to stdout
-        if *cur_fg != Color::Reset || *cur_bg != Color::Reset {
-            writer.queue(ResetColor)?;
-            *cur_fg = Color::Reset;
-            *cur_bg = Color::Reset;
-        }
-        writer.flush()?;
-
-        // Copy current frame to previous
+        emit_buffer_diff(
+            &mut self.writer,
+            &self.current,
+            &self.previous,
+            &mut self.current_fg,
+            &mut self.current_bg,
+        )?;
         self.previous.copy_from(&self.current);
         Ok(())
     }
@@ -138,6 +109,48 @@ impl Engine {
             Ok(None)
         }
     }
+}
+
+fn emit_buffer_diff<W: Write>(
+    writer: &mut W,
+    current: &Buffer,
+    previous: &Buffer,
+    current_fg: &mut Color,
+    current_bg: &mut Color,
+) -> io::Result<()> {
+    let mut last_x = u16::MAX;
+    let mut last_y = u16::MAX;
+
+    for (x, y, cell) in current.diff(previous) {
+        if cell.width == 0 {
+            continue;
+        }
+
+        if x != last_x || y != last_y {
+            writer.queue(MoveTo(x, y))?;
+        }
+
+        if cell.fg != *current_fg {
+            writer.queue(SetForegroundColor(cell.fg))?;
+            *current_fg = cell.fg;
+        }
+        if cell.bg != *current_bg {
+            writer.queue(SetBackgroundColor(cell.bg))?;
+            *current_bg = cell.bg;
+        }
+
+        writer.queue(Print(cell.ch))?;
+
+        last_x = x.saturating_add(cell.width as u16);
+        last_y = y;
+    }
+
+    if *current_fg != Color::Reset || *current_bg != Color::Reset {
+        writer.queue(ResetColor)?;
+        *current_fg = Color::Reset;
+        *current_bg = Color::Reset;
+    }
+    writer.flush()
 }
 
 fn draw_too_small_notice(buffer: &mut Buffer, locale: Locale) {
@@ -168,7 +181,7 @@ fn draw_too_small_notice(buffer: &mut Buffer, locale: Locale) {
 }
 
 fn draw_centered(buffer: &mut Buffer, y: u16, text: &str, color: Color) {
-    let text_width = text.chars().count().min(u16::MAX as usize) as u16;
+    let text_width = text.width().min(u16::MAX as usize) as u16;
     let x = buffer.width().saturating_sub(text_width) / 2;
     buffer.draw_str(x, y, text, color, Color::Reset);
 }
@@ -176,7 +189,9 @@ fn draw_centered(buffer: &mut Buffer, y: u16, text: &str, color: Color) {
 #[cfg(test)]
 mod tests {
     use super::draw_too_small_notice;
+    use super::emit_buffer_diff;
     use crate::terminal::buffer::Buffer;
+    use crate::terminal::buffer::Color;
     use crate::ui::i18n::Locale;
 
     #[test]
@@ -220,7 +235,10 @@ mod tests {
             let rendered = (0..buffer.height())
                 .map(|y| {
                     (0..buffer.width())
-                        .map(|x| buffer.get(x, y).unwrap().ch)
+                        .filter_map(|x| {
+                            let cell = buffer.get(x, y).unwrap();
+                            (cell.width != 0).then_some(cell.ch)
+                        })
                         .collect::<String>()
                 })
                 .collect::<Vec<_>>()
@@ -229,6 +247,32 @@ mod tests {
             for text in expected {
                 assert!(rendered.contains(text), "Missing {text:?} for {locale:?}");
             }
+            if locale == Locale::ZhCn {
+                assert_eq!(buffer.get(34, 11).unwrap().ch, '终');
+            }
         }
+    }
+
+    #[test]
+    fn diff_output_does_not_reposition_after_a_wide_glyph() {
+        let previous = Buffer::new(8, 1);
+        let mut current = Buffer::new(8, 1);
+        current.draw_str(0, 0, "中A", Color::White, Color::Reset);
+        let mut output = Vec::new();
+        let mut foreground = Color::Reset;
+        let mut background = Color::Reset;
+
+        emit_buffer_diff(
+            &mut output,
+            &current,
+            &previous,
+            &mut foreground,
+            &mut background,
+        )
+        .unwrap();
+
+        let output = String::from_utf8(output).unwrap();
+        assert!(output.contains("中A"));
+        assert!(!output.contains("\u{1b}[1;3H"));
     }
 }

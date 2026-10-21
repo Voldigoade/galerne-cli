@@ -1,6 +1,6 @@
 //! Lightweight embedded internationalization system.
 //! Supports English (en), Français (fr), Español (es), and 简体中文 (zh-CN).
-//! Zero external runtime dependencies.
+//! Translations are embedded in the binary and need no runtime locale files or service.
 
 use serde::{Deserialize, Serialize};
 
