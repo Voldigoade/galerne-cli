@@ -16,8 +16,7 @@ pub fn format_career_stats(state: &SaveState) -> String {
         "Total Wait Time Saved:  {:02}h {:02}m {:02}s\n\
          Total Game Time:        {:02}h {:02}m {:02}s\n\
          Runs Initiated:         {}\n\
-         Adversaries Vanquished: {}\n\
-         Tempests Defeated:      {}\n\
+         Distance Traveled:      {:.0}m\n\
          Gale Shards in Bank:    {}",
         wait_h,
         wait_m,
@@ -26,8 +25,7 @@ pub fn format_career_stats(state: &SaveState) -> String {
         play_m,
         play_s,
         state.total_runs_started,
-        state.total_enemies_killed,
-        state.total_bosses_killed,
+        state.total_distance_traveled,
         state.currency_shards
     )
 }
