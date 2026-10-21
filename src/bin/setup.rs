@@ -194,7 +194,7 @@ fn perform_install(silent: bool) {
     println!("  2. Run `galerne play` to jump into an immediate combat session.");
     println!("  3. Run `galerne` to open the full interactive control dashboard.");
     println!("  4. Run your regular builds (cargo build, npm install, etc.) —");
-    println!("     Galerne will activate seamlessly if wait time exceeds 2.5s!\n");
+    println!("     Galerne will activate seamlessly for long builds (~150ms for known long, ~8s fallback)!\n");
 }
 
 fn perform_uninstall(silent: bool) {
@@ -280,34 +280,37 @@ fn remove_from_user_path(dir: &Path) {
     }
 }
 
-fn wait_for_process_exit(pid: u32, max_wait_secs: u64) {
+fn is_process_running(pid: u32) -> bool {
+    #[cfg(windows)]
+    {
+        let output = Command::new("tasklist")
+            .args(["/FI", &format!("PID eq {}", pid)])
+            .output();
+        if let Ok(out) = output {
+            let s = String::from_utf8_lossy(&out.stdout);
+            s.contains(&pid.to_string())
+        } else {
+            false
+        }
+    }
+    #[cfg(unix)]
+    {
+        let ret = unsafe { libc::kill(pid as libc::pid_t, 0) };
+        ret == 0
+    }
+}
+
+fn wait_for_process_exit(pid: u32, max_wait_secs: u64) -> bool {
     let start = std::time::Instant::now();
     let max_dur = std::time::Duration::from_secs(max_wait_secs);
 
     while start.elapsed() < max_dur {
-        #[cfg(windows)]
-        {
-            let output = Command::new("tasklist")
-                .args(["/FI", &format!("PID eq {}", pid)])
-                .output();
-            if let Ok(out) = output {
-                let s = String::from_utf8_lossy(&out.stdout);
-                if !s.contains(&pid.to_string()) {
-                    return;
-                }
-            } else {
-                return;
-            }
-        }
-        #[cfg(unix)]
-        {
-            let ret = unsafe { libc::kill(pid as libc::pid_t, 0) };
-            if ret != 0 {
-                return;
-            }
+        if !is_process_running(pid) {
+            return true;
         }
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
+    !is_process_running(pid)
 }
 
 fn perform_upgrade(silent: bool, wait_pid: Option<u32>, target_path: Option<PathBuf>) {
@@ -318,7 +321,13 @@ fn perform_upgrade(silent: bool, wait_pid: Option<u32>, target_path: Option<Path
                 pid
             );
         }
-        wait_for_process_exit(pid, 15);
+        if !wait_for_process_exit(pid, 15) {
+            eprintln!(
+                "[✕] Error: Previous process (PID {}) did not exit within timeout. Upgrade aborted safely.",
+                pid
+            );
+            std::process::exit(1);
+        }
     }
 
     let target_bin = target_path.unwrap_or_else(|| get_install_dir().join(get_binary_name()));
@@ -347,47 +356,14 @@ fn perform_upgrade(silent: bool, wait_pid: Option<u32>, target_path: Option<Path
         std::process::exit(1);
     }
 
-    let backup_bin = target_bin.with_extension("exe.old");
-    let had_existing = target_bin.exists();
-    if had_existing {
-        let _ = fs::rename(&target_bin, &backup_bin);
-    }
-
-    let write_res = (|| -> io::Result<()> {
-        let mut file = File::create(&target_bin)?;
-        file.write_all(&binary_bytes)?;
-        file.sync_all()?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&target_bin, fs::Permissions::from_mode(0o755))?;
-        }
-        Ok(())
-    })();
-
-    if let Err(e) = write_res {
-        if had_existing {
-            let _ = fs::rename(&backup_bin, &target_bin);
-        }
-        eprintln!("[✕] Upgrade failed to write binary: {}", e);
+    if let Err(e) =
+        galerne::updater::windows::replace_and_verify_windows_binary(&target_bin, &binary_bytes)
+    {
+        eprintln!(
+            "[✕] Upgrade smoke check failed: {}. Rolled back to previous version.",
+            e
+        );
         std::process::exit(1);
-    }
-
-    let smoke_check = std::process::Command::new(&target_bin)
-        .arg("--version")
-        .output();
-    if let Ok(out) = smoke_check {
-        if !out.status.success() {
-            if had_existing {
-                let _ = fs::rename(&backup_bin, &target_bin);
-            }
-            eprintln!("[✕] Upgrade smoke check failed. Rolled back to previous version.");
-            std::process::exit(1);
-        }
-    }
-
-    if had_existing {
-        let _ = fs::remove_file(&backup_bin);
     }
 
     if let Some(parent) = target_bin.parent() {

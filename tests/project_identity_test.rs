@@ -88,10 +88,15 @@ fn test_derive_project_id_properties() {
         "Different projects must produce distinct project IDs"
     );
 
-    // 3. Opaque & privacy-conscious: no path strings in ID
+    // 3. Opaque & privacy-conscious: no path strings in ID, exactly 64 hex characters
+    assert_eq!(
+        id_a1.len(),
+        64,
+        "Project ID must be a 64-character SHA-256 hex string"
+    );
     assert!(
-        id_a1.starts_with("p_"),
-        "Project ID must have a clean prefix 'p_'"
+        id_a1.chars().all(|c| c.is_ascii_hexdigit()),
+        "Project ID must consist strictly of hex characters"
     );
     assert!(
         !id_a1.contains("workspace") && !id_a1.contains("alpha") && !id_a1.contains("/"),
@@ -115,7 +120,15 @@ fn test_get_or_create_salt_persistence() {
     fs::create_dir_all(&temp_data_dir).expect("create temp data dir");
 
     let salt1 = get_or_create_salt(&temp_data_dir).expect("first get_or_create_salt");
-    assert!(!salt1.is_empty(), "Salt must not be empty");
+    assert_eq!(
+        salt1.len(),
+        64,
+        "Salt must be 64 hex characters (32 bytes entropy)"
+    );
+    assert!(
+        salt1.chars().all(|c| c.is_ascii_hexdigit()),
+        "Salt must be valid hex"
+    );
 
     let salt_path = temp_data_dir.join("salt");
     assert!(salt_path.exists(), "Salt file must exist on disk");
@@ -137,8 +150,15 @@ fn test_resolve_current_project_id() {
     fs::create_dir_all(&temp_data_dir).expect("create temp data dir");
 
     let pid = resolve_current_project_id(&temp_data_dir);
-    assert!(pid.starts_with("p_"));
-    assert_eq!(pid.len(), 18); // "p_" + 16 hex chars
+    assert_eq!(
+        pid.len(),
+        64,
+        "Resolved project ID must be 64 hex characters"
+    );
+    assert!(
+        pid.chars().all(|c| c.is_ascii_hexdigit()),
+        "Resolved project ID must be valid hex"
+    );
 
     let _ = fs::remove_dir_all(&temp_data_dir);
 }

@@ -6,7 +6,8 @@
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
+
+use sha2::{Digest, Sha256};
 
 /// Validates whether a `.git` path represents an actual git repository or worktree.
 fn is_valid_git_marker(marker: &Path) -> bool {
@@ -68,34 +69,29 @@ pub fn find_project_root(start_dir: &Path) -> PathBuf {
     current
 }
 
-/// Derives a privacy-preserving opaque project identifier from the root path and a local salt.
+/// Derives a privacy-preserving opaque project identifier using SHA-256 over normalized path and local salt.
 ///
-/// Output format: `p_<16 hex chars>`
+/// Output format: 64-character lowercase hex string.
 pub fn derive_project_id(root: &Path, salt: &str) -> String {
     let normalized = normalize_path(root);
 
-    let mut h1 = crc32fast::Hasher::new();
-    h1.update(salt.as_bytes());
-    h1.update(b":path_a:");
-    h1.update(normalized.as_bytes());
-    let c1 = h1.finalize();
+    let mut hasher = Sha256::new();
+    hasher.update(salt.as_bytes());
+    hasher.update(b":");
+    hasher.update(normalized.as_bytes());
+    let digest = hasher.finalize();
 
-    let mut h2 = crc32fast::Hasher::new();
-    h2.update(salt.as_bytes());
-    h2.update(b":path_b:");
-    h2.update(normalized.as_bytes());
-    let c2 = h2.finalize();
-
-    format!("p_{:08x}{:08x}", c1, c2)
+    format!("{:064x}", digest)
 }
 
-/// Retrieves or initializes a persistent installation-local salt stored in `<data_dir>/salt`.
+/// Retrieves or initializes a persistent installation-local 32-byte salt stored in `<data_dir>/salt`.
+/// Salt is encoded as a 64-character lowercase hex string.
 pub fn get_or_create_salt(data_dir: &Path) -> io::Result<String> {
     let salt_path = data_dir.join("salt");
     if salt_path.exists() {
         if let Ok(content) = fs::read_to_string(&salt_path) {
             let trimmed = content.trim();
-            if !trimmed.is_empty() {
+            if trimmed.len() == 64 && trimmed.chars().all(|c| c.is_ascii_hexdigit()) {
                 return Ok(trimmed.to_string());
             }
         }
@@ -105,27 +101,12 @@ pub fn get_or_create_salt(data_dir: &Path) -> io::Result<String> {
         fs::create_dir_all(parent)?;
     }
 
-    // Generate random salt using high-resolution timestamps, process ID, and memory entropy
-    let now = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(123456789);
-    let pid = std::process::id();
-    let stack_marker = &now as *const u128 as usize;
+    // Generate 32 bytes of cryptographically secure random entropy from OS source
+    let mut salt_bytes = [0u8; 32];
+    getrandom::getrandom(&mut salt_bytes)
+        .map_err(|e| io::Error::other(format!("OS random source error: {}", e)))?;
 
-    let mut hasher = crc32fast::Hasher::new();
-    hasher.update(&now.to_le_bytes());
-    hasher.update(&pid.to_le_bytes());
-    hasher.update(&stack_marker.to_le_bytes());
-    let r1 = hasher.finalize();
-
-    let mut hasher2 = crc32fast::Hasher::new();
-    hasher2.update(&pid.to_le_bytes());
-    hasher2.update(&now.to_be_bytes());
-    hasher2.update(b"salt_seed");
-    let r2 = hasher2.finalize();
-
-    let generated_salt = format!("{:08x}{:08x}", r1, r2);
+    let generated_salt: String = salt_bytes.iter().map(|b| format!("{:02x}", b)).collect();
     let _ = fs::write(&salt_path, &generated_salt);
     Ok(generated_salt)
 }

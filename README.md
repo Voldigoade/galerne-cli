@@ -4,7 +4,7 @@ An ultra-lightweight, persistent native Rust terminal game designed explicitly a
 
 ```text
 ╭─────────────────────────────────────────────────────────────────────────────╮
-│                               GALERNE v0.2.0                                │
+│                               GALERNE v0.2.1                                │
 ├──────────────────────┬──────────────────────────────────────────────────────┤
 │ ▶ PLAY               │  DEPLOYMENT CONTROLS                                 │
 │   WORKSHOP           │                                                      │
@@ -151,11 +151,15 @@ Galerne automatically detects and intercepts eligible developer build operations
 
 ### Project-Aware Intelligence
 - **Project Isolation:** Predictions are strictly scoped to `(Project + Command)`. A 45-second build in a large repository never causes a 2-second build in a smaller project to launch Galerne.
+- **Live Output Streaming:** Normal task output remains visible live during pre-game observation; commands such as `cargo build` never appear frozen or delayed.
+- **Pre-Game Interruption:** Hitting Ctrl+C before gameplay appears cancels the child task immediately without swallowing the signal or opening the game.
 - **5-Second Wait Protection:** Unknown or new commands use a conservative fallback threshold of 8.0 seconds. Any command completing within ~5 seconds completes normally with **zero game appearance or terminal flicker**.
 - **Known-Long Operations:** Operations historically taking ≥ 8.0 seconds enter gameplay almost immediately (< 150 ms anti-flicker guard).
 - **Graceful Extension:** Fast operations that unexpectedly take long (e.g., clean rebuilds) will smoothly activate once the 8.0s threshold is crossed.
-- **Cancellation Immunity:** Tasks interrupted by the user (Ctrl+C) are excluded from duration history, preventing aborted tasks from corrupting future predictions.
-- **Privacy Protection:** Project identities are derived from local persistent salts. Raw absolute file paths and arbitrary command-line arguments are **never stored**.
+- **True Duration History:** History records actual child termination time even if the user leaves game view early to inspect logs in Task View.
+- **Cancellation Immunity:** Tasks interrupted by the user (Ctrl+C on any path, SIGINT, or exit code 130) are excluded from duration history, preventing aborted tasks from corrupting future predictions.
+- **Privacy Protection:** Project identities are derived from local persistent 32-byte OS random salts and SHA-256 hashes. Raw absolute file paths and arbitrary command-line arguments are **never stored**.
+- **Strictly Bounded Storage:** Prediction history on disk is strictly enforced to $< 10\text{ KiB}$ through LRU entry pruning.
 - **Interactive Exclusion:** Interactive commands (`cargo run`, REPLs, `git`, `vim`) and watch modes (`--watch`) **strictly bypass** Galerne with inherited stdio.
 
 ---
@@ -202,9 +206,9 @@ Run read-only diagnostics at any time to verify system health:
 
 ```bash
 $ galerne doctor
-Galerne v0.2.0 System Diagnostics
+Galerne v0.2.1 System Diagnostics
 
-[✓] Executable:        /usr/local/bin/galerne (v0.2.0)
+[✓] Executable:        /usr/local/bin/galerne (v0.2.1)
 [✓] Target Platform:   linux x86_64
 [✓] Standard Output:   Interactive TTY
 [✓] Terminal Size:     80x24 (Meets 60x20 minimum)

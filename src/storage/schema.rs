@@ -100,7 +100,7 @@ impl Default for GameSettings {
             color_enabled: true,
             animations_enabled: true,
             auto_activate: true,
-            anti_flicker_delay_ms: 2500, // 2.5s anti-flicker delay for unknown tasks
+            anti_flicker_delay_ms: 8000, // 8.0s conservative fallback delay for unknown/short tasks
         }
     }
 }

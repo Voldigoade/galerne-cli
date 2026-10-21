@@ -474,7 +474,7 @@ pub fn run_dashboard() -> io::Result<()> {
                 buf.draw_str(
                     px,
                     py + 8,
-                    "  Galerne automatically appears if the task takes > 2.5s.",
+                    "  Galerne appears for long tasks (~150ms for known long, ~8s fallback).",
                     Color::DarkGrey,
                     bg,
                 );

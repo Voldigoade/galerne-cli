@@ -12,16 +12,15 @@ mod live_update_tests {
     fn test_live_release_metadata_and_asset_download_verification() {
         // 1. Query official release metadata from GitHub
         let metadata = fetch_latest_release(OFFICIAL_REPO).expect("fetch latest release");
-        assert_eq!(
-            metadata.tag_name, "v0.2.0",
-            "Latest published release tag must be v0.2.0"
+        assert!(
+            metadata.tag_name.starts_with('v'),
+            "Latest published release tag must start with 'v'"
         );
-        assert!(!metadata.prerelease, "v0.2.0 must be stable release");
+        assert!(!metadata.prerelease, "Release must be stable");
 
         let latest_ver = SemanticVersion::parse(&metadata.tag_name).expect("parse tag version");
         assert_eq!(latest_ver.major, 0);
         assert_eq!(latest_ver.minor, 2);
-        assert_eq!(latest_ver.patch, 0);
 
         // 2. Resolve Linux x86_64 assets
         let (bin_asset, sha_asset) =
@@ -57,9 +56,9 @@ mod live_update_tests {
             .expect("write mock exe");
         fs::set_permissions(&target_exe, fs::Permissions::from_mode(0o755)).expect("set perms");
 
-        apply_linux_update(&target_exe, &bin_bytes).expect("apply update with real v0.2.0 binary");
+        apply_linux_update(&target_exe, &bin_bytes).expect("apply update with real binary");
 
-        // 6. Execute updated binary and assert v0.2.0 output
+        // 6. Execute updated binary and assert galerne version output
         let output = std::process::Command::new(&target_exe)
             .arg("--version")
             .output()
@@ -67,8 +66,8 @@ mod live_update_tests {
         assert!(output.status.success());
         let stdout = String::from_utf8_lossy(&output.stdout);
         assert!(
-            stdout.contains("galerne 0.2.0"),
-            "Updated binary must report galerne 0.2.0, got: '{}'",
+            stdout.contains("galerne 0.2."),
+            "Updated binary must report galerne 0.2.x, got: '{}'",
             stdout.trim()
         );
 

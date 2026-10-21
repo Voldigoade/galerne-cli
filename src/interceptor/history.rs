@@ -15,13 +15,14 @@ use serde::{Deserialize, Serialize};
 
 use super::matcher::CommandClass;
 
-pub const HISTORY_SCHEMA_VERSION: u32 = 2;
+pub const HISTORY_SCHEMA_VERSION: u32 = 3;
 pub const PREDICTED_LONG_THRESHOLD_SECS: f32 = 8.0;
 pub const KNOWN_LONG_ANTI_FLICKER_MS: u64 = 150;
 pub const CONSERVATIVE_FALLBACK_DELAY_MS: u64 = 8000;
 pub const MIN_SAMPLES_FOR_PREDICTION: usize = 2;
 pub const MAX_SAMPLES_PER_RECORD: usize = 10;
-pub const MAX_TRACKED_ENTRIES: usize = 128;
+pub const MAX_TRACKED_ENTRIES: usize = 64;
+pub const MAX_SERIALIZED_BYTES: usize = 10 * 1024; // Strictly enforce < 10 KiB on disk
 
 fn default_schema_version() -> u32 {
     HISTORY_SCHEMA_VERSION
@@ -174,13 +175,30 @@ impl DurationHistory {
         }
         record.last_updated_epoch_secs = now_epoch;
 
-        // Prune oldest entries if capacity exceeded
-        if self.entries.len() > MAX_TRACKED_ENTRIES {
-            self.prune_oldest_entry();
+        // Prune oldest entries if capacity or serialized size exceeded
+        self.prune_to_bounds();
+    }
+
+    /// Prunes oldest entries to guarantee both entry limit and strict < 10 KiB serialized size.
+    pub fn prune_to_bounds(&mut self) {
+        while self.entries.len() > MAX_TRACKED_ENTRIES {
+            if !self.prune_oldest_entry() {
+                break;
+            }
+        }
+
+        while self.serialized_size_bytes() > MAX_SERIALIZED_BYTES && !self.entries.is_empty() {
+            if !self.prune_oldest_entry() {
+                break;
+            }
         }
     }
 
-    fn prune_oldest_entry(&mut self) {
+    pub fn serialized_size_bytes(&self) -> usize {
+        serde_json::to_string(self).map(|s| s.len()).unwrap_or(0)
+    }
+
+    fn prune_oldest_entry(&mut self) -> bool {
         let oldest_key = self
             .entries
             .iter()
@@ -189,12 +207,15 @@ impl DurationHistory {
 
         if let Some(key) = oldest_key {
             self.entries.remove(&key);
+            true
+        } else {
+            false
         }
     }
 
     /// Loads history safely from disk.
-    /// Handles backward compatibility: if previous schema (v1) is encountered,
-    /// discards incompatible history cleanly without crashing.
+    /// Handles backward compatibility: if previous schema (v1/v2) is encountered,
+    /// or if entries contain old project ID formats, discards them cleanly without crashing.
     pub fn load_from_file(path: &Path) -> Self {
         if !path.exists() {
             return Self::default();
@@ -215,23 +236,32 @@ impl DurationHistory {
             if val.get("schema_version").and_then(|v| v.as_u64())
                 == Some(HISTORY_SCHEMA_VERSION as u64)
             {
-                if let Ok(history) = serde_json::from_value::<DurationHistory>(val) {
+                if let Ok(mut history) = serde_json::from_value::<DurationHistory>(val) {
+                    // Retain only valid entries whose keys are <64-char-hex-hash>:<command_class>
+                    history.entries.retain(|k, _| {
+                        let parts: Vec<&str> = k.split(':').collect();
+                        parts.len() == 2
+                            && parts[0].len() == 64
+                            && parts[0].chars().all(|c| c.is_ascii_hexdigit())
+                    });
+                    history.prune_to_bounds();
                     return history;
                 }
             }
         }
 
-        // If incompatible schema or corrupt, start clean v2 history
+        // If incompatible schema or corrupt, start clean default history
         Self::default()
     }
 
-    /// Saves history safely to disk.
-    pub fn save_to_file(&self, path: &Path) -> io::Result<()> {
+    /// Saves history safely to disk, guaranteeing bounds.
+    pub fn save_to_file(&mut self, path: &Path) -> io::Result<()> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
 
-        let json = serde_json::to_string_pretty(self)?;
+        self.prune_to_bounds();
+        let json = serde_json::to_string(self)?;
         let mut file = File::create(path)?;
         file.write_all(json.as_bytes())?;
         file.sync_all()?;

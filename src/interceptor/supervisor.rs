@@ -68,26 +68,48 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
 
     // Install cross-platform Ctrl+C handler
     signal::setup_handler();
+    signal::reset();
 
     // Spawn child process
     let mut supervisor = ProcessSupervisor::spawn(args)?;
 
     let anti_flicker_delay = Duration::from_millis(decision.effective_delay_ms());
 
-    // Phase 1: Anti-flicker observation period
+    // Phase 1: Pre-game observation period with live output streaming
     let observation_start = Instant::now();
+    let mut child_completed_early = None;
+
     while observation_start.elapsed() < anti_flicker_delay {
-        if let Some(status) = supervisor.try_wait()? {
-            // Task completed quickly! Zero game flicker.
+        // Stream arriving output live to stdout so developer commands never appear frozen
+        print_buffered_logs(&supervisor);
+
+        // Pre-game Ctrl+C behaves like normal immediate task cancellation
+        if signal::is_interrupted() {
+            let _ = supervisor.send_interrupt();
+            let status = supervisor.wait()?;
             print_buffered_logs(&supervisor);
-            let duration_secs = start_time.elapsed().as_secs_f32();
+            return Ok(status.code().unwrap_or(130));
+        }
+
+        if let Some(status) = supervisor.try_wait()? {
+            child_completed_early = Some(status);
+            break;
+        }
+
+        thread::sleep(Duration::from_millis(15));
+    }
+
+    if let Some(status) = child_completed_early {
+        // Task completed within observation window. Flush any remaining logs.
+        print_buffered_logs(&supervisor);
+        let duration_secs = start_time.elapsed().as_secs_f32();
+        if !is_cancelled_status(false, &status) {
             history.record(&project_id, matched_class, duration_secs);
             let _ = history.save_to_file(&history_path);
-            return Ok(status
-                .code()
-                .unwrap_or(if status.success() { 0 } else { 1 }));
         }
-        thread::sleep(Duration::from_millis(15));
+        return Ok(status
+            .code()
+            .unwrap_or(if status.success() { 0 } else { 1 }));
     }
 
     // Phase 2: Enter Game View
@@ -219,26 +241,29 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
 
     if let Some(status) = child_completed_in_game {
         // Child completed while in game view: play brief completion transition
+        let true_duration = start_time.elapsed().as_secs_f32();
         run_completion_transition(&mut engine, status.success(), xp_gained, shards_gained);
 
         // Restore terminal to cooked mode
         drop(guard);
 
-        // Print buffered child logs
+        // Print only buffered lines that arrived during game view
         print_buffered_logs(&supervisor);
 
-        history.record(&project_id, matched_class, total_duration as f32);
-        let _ = history.save_to_file(&history_path);
+        if !is_cancelled_status(false, &status) {
+            history.record(&project_id, matched_class, true_duration);
+            let _ = history.save_to_file(&history_path);
+        }
 
         return Ok(status
             .code()
             .unwrap_or(if status.success() { 0 } else { 1 }));
     }
 
-    // First Ctrl+C triggered: restore cooked terminal mode immediately
+    // First Ctrl+C or Esc/q triggered: restore cooked terminal mode immediately
     drop(guard);
 
-    // Print all buffered lines collected up to this moment
+    // Print all buffered lines collected during game view
     print_buffered_logs(&supervisor);
 
     // Enter Task View: live streaming until child finishes or second Ctrl+C arrives
@@ -266,16 +291,50 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
         thread::sleep(Duration::from_millis(20));
     };
 
-    // User-cancelled tasks must NEVER poison history
-    let exit_code = exit_status.code();
-    if !was_cancelled && exit_code != Some(130) {
-        history.record(&project_id, matched_class, total_duration as f32);
+    // Measure TRUE child duration at actual termination
+    let true_duration = start_time.elapsed().as_secs_f32();
+
+    // User-cancelled tasks must NEVER poison prediction history on ANY path
+    if !is_cancelled_status(was_cancelled, &exit_status) {
+        history.record(&project_id, matched_class, true_duration);
         let _ = history.save_to_file(&history_path);
     }
+
+    // Update career total wait time with true measured duration
+    save_state.total_wait_time_saved_secs += true_duration as u64;
+    let _ = save_manager.save(&save_state);
 
     Ok(exit_status
         .code()
         .unwrap_or(if exit_status.success() { 0 } else { 130 }))
+}
+
+/// Determines whether an execution was cancelled by user action or termination signals.
+pub fn is_cancelled_status(was_user_cancelled: bool, status: &std::process::ExitStatus) -> bool {
+    if was_user_cancelled {
+        return true;
+    }
+    if let Some(code) = status.code() {
+        if code == 130 || code == 143 {
+            return true;
+        }
+        #[cfg(windows)]
+        {
+            if code == -1073741510 || code as u32 == 0xC000013A {
+                return true;
+            }
+        }
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        if let Some(sig) = status.signal() {
+            if sig == 2 || sig == 15 || sig == 9 {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 fn print_buffered_logs(supervisor: &ProcessSupervisor) {
