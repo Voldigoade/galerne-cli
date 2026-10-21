@@ -152,7 +152,7 @@ impl ProcessSupervisor {
         self.child.kill()
     }
 
-    /// Sends an interrupt signal (SIGINT on Unix / Ctrl+C on Windows) to the child process group.
+    /// Terminates or interrupts the supervised process (SIGINT to the process group on Unix; process-tree termination via taskkill on Windows).
     pub fn send_interrupt(&mut self) -> io::Result<()> {
         #[cfg(unix)]
         {

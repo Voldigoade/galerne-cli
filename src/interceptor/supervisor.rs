@@ -40,14 +40,27 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
             .unwrap_or(if status.success() { 0 } else { 1 }));
     }
 
-    let matched_class = match_command(args);
+    // Check command eligibility: filter out non-eligible commands, interactive programs,
+    // unsupported subcommands (e.g. cargo run, docker ps, npm run dev), and watch modes.
+    let matched_class = match match_command(args) {
+        Some(class) => class,
+        None => {
+            // Bypass Galerne completely with inherited stdin/stdout/stderr
+            let mut cmd = std::process::Command::new(&args[0]);
+            if args.len() > 1 {
+                cmd.args(&args[1..]);
+            }
+            let status = cmd.status()?;
+            return Ok(status
+                .code()
+                .unwrap_or(if status.success() { 0 } else { 1 }));
+        }
+    };
 
     let history_path = save_manager.data_dir().join("history.json");
     let mut history = DurationHistory::load_from_file(&history_path);
 
-    let is_predicted_long = matched_class
-        .map(|c| history.is_predicted_long(c))
-        .unwrap_or(false);
+    let is_predicted_long = history.is_predicted_long(matched_class);
 
     let start_time = Instant::now();
 
@@ -70,10 +83,8 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
             // Task completed quickly! Zero game flicker.
             print_buffered_logs(&supervisor);
             let duration_secs = start_time.elapsed().as_secs_f32();
-            if let Some(class) = matched_class {
-                history.record(class, duration_secs);
-                let _ = history.save_to_file(&history_path);
-            }
+            history.record(matched_class, duration_secs);
+            let _ = history.save_to_file(&history_path);
             return Ok(status
                 .code()
                 .unwrap_or(if status.success() { 0 } else { 1 }));
@@ -218,10 +229,8 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
         // Print buffered child logs
         print_buffered_logs(&supervisor);
 
-        if let Some(class) = matched_class {
-            history.record(class, total_duration as f32);
-            let _ = history.save_to_file(&history_path);
-        }
+        history.record(matched_class, total_duration as f32);
+        let _ = history.save_to_file(&history_path);
 
         return Ok(status
             .code()
@@ -257,10 +266,8 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
         thread::sleep(Duration::from_millis(20));
     };
 
-    if let Some(class) = matched_class {
-        history.record(class, total_duration as f32);
-        let _ = history.save_to_file(&history_path);
-    }
+    history.record(matched_class, total_duration as f32);
+    let _ = history.save_to_file(&history_path);
 
     Ok(exit_status
         .code()

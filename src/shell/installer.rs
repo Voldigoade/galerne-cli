@@ -80,16 +80,44 @@ pub fn detect_shell_configs() -> Vec<(ShellType, PathBuf)> {
         if zshrc.exists() {
             configs.push((ShellType::Zsh, zshrc));
         }
+
+        // PowerShell 7 on Unix
+        let pwsh_unix = home_p
+            .join(".config")
+            .join("powershell")
+            .join("Microsoft.PowerShell_profile.ps1");
+        if pwsh_unix.exists() {
+            configs.push((ShellType::PowerShell, pwsh_unix));
+        }
     }
 
     if let Ok(userprofile) = env::var("USERPROFILE") {
         let up = PathBuf::from(userprofile);
-        let ps_profile = up
-            .join("Documents")
+        let docs = up.join("Documents");
+
+        // Windows PowerShell (5.1)
+        let win_ps = docs
             .join("WindowsPowerShell")
             .join("Microsoft.PowerShell_profile.ps1");
-        if ps_profile.exists() {
-            configs.push((ShellType::PowerShell, ps_profile));
+
+        // Modern PowerShell 7+ (Core / pwsh)
+        let pwsh = docs
+            .join("PowerShell")
+            .join("Microsoft.PowerShell_profile.ps1");
+
+        // If either profile already exists, configure existing ones
+        let any_exists = win_ps.exists() || pwsh.exists();
+        if any_exists {
+            if win_ps.exists() {
+                configs.push((ShellType::PowerShell, win_ps));
+            }
+            if pwsh.exists() {
+                configs.push((ShellType::PowerShell, pwsh));
+            }
+        } else {
+            // Fresh Windows account: target both WindowsPowerShell and PowerShell 7 profile paths
+            configs.push((ShellType::PowerShell, win_ps));
+            configs.push((ShellType::PowerShell, pwsh));
         }
     }
 
@@ -99,6 +127,10 @@ pub fn detect_shell_configs() -> Vec<(ShellType, PathBuf)> {
 /// Idempotently installs or updates the integration marker block inside a shell config file.
 /// Returns true if the file was modified.
 pub fn install_marker_block(path: &Path, shell: ShellType) -> io::Result<bool> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
     let new_block = shell.generate_block();
 
     let existing = if path.exists() {
@@ -159,10 +191,16 @@ pub fn remove_marker_block(path: &Path) -> io::Result<bool> {
 
         let mut cleaned = String::with_capacity(content.len());
         cleaned.push_str(before.trim_end());
-        cleaned.push('\n');
+        if !before.trim().is_empty() && !after.trim().is_empty() {
+            cleaned.push('\n');
+        }
         cleaned.push_str(after.trim_start());
 
-        fs::write(path, cleaned)?;
+        if cleaned.trim().is_empty() {
+            let _ = fs::remove_file(path);
+        } else {
+            fs::write(path, cleaned)?;
+        }
         Ok(true)
     } else {
         Ok(false)

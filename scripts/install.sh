@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# Galerne installer for Linux & macOS
+# Galerne installer for Linux (x86_64)
 # Usage: curl -sSL https://raw.githubusercontent.com/Voldigoade/galerne/main/scripts/install.sh | sh
 
 set -eu
@@ -7,22 +7,31 @@ set -eu
 INSTALL_DIR="${HOME}/.local/bin"
 REPO="Voldigoade/galerne"
 
-echo "=== Galerne Installer ==="
+echo "=== Galerne Linux Installer ==="
 
-# Check architecture and OS
+# Check operating system
 OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
-ARCH="$(uname -m)"
+if [ "$OS" != "linux" ]; then
+    echo "Error: This script installs pre-compiled binaries for Linux (x86_64)." >&2
+    echo "Detected OS: ${OS}" >&2
+    echo "To install on other platforms (e.g. macOS), build from source using:" >&2
+    echo "  cargo install --git https://github.com/${REPO}.git --bin galerne" >&2
+    exit 1
+fi
 
+# Check architecture
+ARCH="$(uname -m)"
 case "$ARCH" in
     x86_64|amd64) TARGET_ARCH="x86_64" ;;
-    aarch64|arm64) TARGET_ARCH="aarch64" ;;
     *)
-        echo "Error: Unsupported architecture $ARCH" >&2
+        echo "Error: Pre-compiled binaries are provided for x86_64 (detected: ${ARCH})." >&2
+        echo "To install on ${ARCH}, build from source using:" >&2
+        echo "  cargo install --git https://github.com/${REPO}.git --bin galerne" >&2
         exit 1
         ;;
 esac
 
-echo "Detected Platform: ${OS} (${TARGET_ARCH})"
+echo "Detected Platform: Linux (${TARGET_ARCH})"
 
 # Ensure install directory exists
 mkdir -p "$INSTALL_DIR"
@@ -36,7 +45,7 @@ elif [ -f "./target/release/galerne" ]; then
     chmod +x "${INSTALL_DIR}/galerne"
 else
     echo "Fetching latest release binary from GitHub..."
-    DOWNLOAD_URL="https://github.com/${REPO}/releases/latest/download/galerne-${TARGET_ARCH}-unknown-linux-gnu.tar.gz"
+    DOWNLOAD_URL="https://github.com/${REPO}/releases/latest/download/galerne-x86_64-unknown-linux-gnu.tar.gz"
     TMP_DIR="$(mktemp -d)"
     trap 'rm -rf "$TMP_DIR"' EXIT
 

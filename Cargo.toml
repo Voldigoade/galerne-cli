@@ -1,6 +1,6 @@
 [package]
 name = "galerne"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["Voldigoade"]
 description = "Ultra-lightweight persistent terminal game designed for developer wait times"

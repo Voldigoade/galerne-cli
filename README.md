@@ -4,7 +4,7 @@ An ultra-lightweight, persistent native Rust terminal game designed explicitly a
 
 ```text
 ╭─────────────────────────────────────────────────────────────────────────────╮
-│                               GALERNE v0.1.0                                │
+│                               GALERNE v0.1.1                                │
 ├──────────────────────┬──────────────────────────────────────────────────────┤
 │ ▶ PLAY               │  DEPLOYMENT CONTROLS                                 │
 │   WORKSHOP           │                                                      │
@@ -66,16 +66,20 @@ cargo build
     ├─► Arriving output streams live to stdout
     │
     └─► Press Ctrl+C (Second interrupt)
-          └── Cancels the cargo build natively (SIGINT)
+          └── Cancels the supervised build command
 ```
+
+Platform interrupt handling:
+- **Linux / Unix:** Interrupts gracefully via native `SIGINT` forwarded directly to the child process group (`kill(-pid, SIGINT)`).
+- **Windows:** Cancels via process-tree termination (`taskkill /PID <pid> /T /F`), ensuring the entire spawned compiler and linker process tree (`cargo`, `rustc`, `link.exe`, etc.) is cleanly terminated without orphan tasks.
 
 ---
 
 ## Installation
 
-### Windows (Recommended Native Installer)
+### Windows (x86_64 Recommended Native Installer)
 
-Download and run **`Galerne-Setup-x86_64.exe`** from the [GitHub Releases](https://github.com/Voldigoade/galerne/releases/latest) page. The installer automatically configures your user PATH and sets up PowerShell integration.
+Download and run **`Galerne-Setup-x86_64.exe`** from the [GitHub Releases](https://github.com/Voldigoade/galerne/releases/latest) page. The installer automatically configures your user PATH and sets up PowerShell integration (supporting both Windows PowerShell 5.1 and modern PowerShell 7+).
 
 Alternatively, install via PowerShell:
 
@@ -83,11 +87,13 @@ Alternatively, install via PowerShell:
 irm https://raw.githubusercontent.com/Voldigoade/galerne/main/scripts/install.ps1 | iex
 ```
 
-### Linux & macOS (One-Line Terminal Install)
+### Linux (x86_64 One-Line Terminal Install)
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/Voldigoade/galerne/main/scripts/install.sh | sh
 ```
+
+*(Note: Prebuilt release artifacts are provided for Linux x86_64 and Windows x86_64. For macOS, aarch64, or custom environments, see [Building From Source](#building-from-source).)*
 
 ### Building From Source
 
@@ -178,9 +184,9 @@ Run read-only diagnostics at any time to verify system health:
 
 ```bash
 $ galerne doctor
-Galerne v0.1.0 System Diagnostics
+Galerne v0.1.1 System Diagnostics
 
-[✓] Executable:        /usr/local/bin/galerne (v0.1.0)
+[✓] Executable:        /usr/local/bin/galerne (v0.1.1)
 [✓] Target Platform:   linux x86_64
 [✓] Standard Output:   Interactive TTY
 [✓] Terminal Size:     80x24 (Meets 60x20 minimum)
