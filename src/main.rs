@@ -29,6 +29,12 @@ fn main() {
                 process::exit(1);
             }
         }
+        CliAction::Prototype => {
+            if let Err(e) = galerne::ui::prototype::run_pixel_prototype() {
+                eprintln!("Error launching Galerne pixel prototype: {}", e);
+                process::exit(1);
+            }
+        }
         CliAction::Stats => {
             let state = load_save_state(&save_manager);
             let locale = state.settings.locale.unwrap_or_else(Locale::detect);

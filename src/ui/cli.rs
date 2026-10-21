@@ -7,6 +7,7 @@ use crate::ui::i18n::{t, Locale};
 pub enum CliAction {
     Dashboard,
     Play,
+    Prototype,
     Stats,
     Doctor,
     Saves,
@@ -31,6 +32,7 @@ pub fn parse_cli_action(args: &[String]) -> CliAction {
     let cmd = args[1].to_lowercase();
     match cmd.as_str() {
         "play" => CliAction::Play,
+        "prototype" => CliAction::Prototype,
         "stats" => CliAction::Stats,
         "doctor" => CliAction::Doctor,
         "saves" => CliAction::Saves,
@@ -85,6 +87,7 @@ fn help_text(locale: Locale) -> String {
     let commands = [
         ("galerne", "cli_dashboard"),
         ("galerne play", "cli_play"),
+        ("galerne prototype", "cli_prototype"),
         ("galerne stats", "cli_stats"),
         ("galerne doctor", "cli_doctor"),
         ("galerne saves", "cli_saves"),

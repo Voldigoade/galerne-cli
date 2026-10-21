@@ -17,6 +17,10 @@ fn test_cli_argument_parsing() {
         CliAction::Play
     );
     assert_eq!(
+        parse_cli_action(&["galerne".to_string(), "prototype".to_string()]),
+        CliAction::Prototype
+    );
+    assert_eq!(
         parse_cli_action(&["galerne".to_string(), "stats".to_string()]),
         CliAction::Stats
     );

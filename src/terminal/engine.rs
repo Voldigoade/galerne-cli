@@ -131,11 +131,11 @@ fn emit_buffer_diff<W: Write>(
         }
 
         if cell.fg != *current_fg {
-            writer.queue(SetForegroundColor(cell.fg))?;
+            queue_color(writer, cell.fg, false)?;
             *current_fg = cell.fg;
         }
         if cell.bg != *current_bg {
-            writer.queue(SetBackgroundColor(cell.bg))?;
+            queue_color(writer, cell.bg, true)?;
             *current_bg = cell.bg;
         }
 
@@ -151,6 +151,67 @@ fn emit_buffer_diff<W: Write>(
         *current_bg = Color::Reset;
     }
     writer.flush()
+}
+
+#[cfg(unix)]
+fn queue_color<W: Write>(writer: &mut W, color: Color, background: bool) -> io::Result<()> {
+    let code = match (color, background) {
+        (Color::Black, false) => Some(30),
+        (Color::DarkRed, false) => Some(31),
+        (Color::DarkGreen, false) => Some(32),
+        (Color::DarkYellow, false) => Some(33),
+        (Color::DarkBlue, false) => Some(34),
+        (Color::DarkMagenta, false) => Some(35),
+        (Color::DarkCyan, false) => Some(36),
+        (Color::Grey, false) => Some(37),
+        (Color::DarkGrey, false) => Some(90),
+        (Color::Red, false) => Some(91),
+        (Color::Green, false) => Some(92),
+        (Color::Yellow, false) => Some(93),
+        (Color::Blue, false) => Some(94),
+        (Color::Magenta, false) => Some(95),
+        (Color::Cyan, false) => Some(96),
+        (Color::White, false) => Some(97),
+        (Color::Black, true) => Some(40),
+        (Color::DarkRed, true) => Some(41),
+        (Color::DarkGreen, true) => Some(42),
+        (Color::DarkYellow, true) => Some(43),
+        (Color::DarkBlue, true) => Some(44),
+        (Color::DarkMagenta, true) => Some(45),
+        (Color::DarkCyan, true) => Some(46),
+        (Color::Grey, true) => Some(47),
+        (Color::DarkGrey, true) => Some(100),
+        (Color::Red, true) => Some(101),
+        (Color::Green, true) => Some(102),
+        (Color::Yellow, true) => Some(103),
+        (Color::Blue, true) => Some(104),
+        (Color::Magenta, true) => Some(105),
+        (Color::Cyan, true) => Some(106),
+        (Color::White, true) => Some(107),
+        (Color::Reset, false) => Some(39),
+        (Color::Reset, true) => Some(49),
+        _ => None,
+    };
+
+    if let Some(code) = code {
+        write!(writer, "\x1b[{code}m")
+    } else if background {
+        writer.queue(SetBackgroundColor(color))?;
+        Ok(())
+    } else {
+        writer.queue(SetForegroundColor(color))?;
+        Ok(())
+    }
+}
+
+#[cfg(not(unix))]
+fn queue_color<W: Write>(writer: &mut W, color: Color, background: bool) -> io::Result<()> {
+    if background {
+        writer.queue(SetBackgroundColor(color))?;
+    } else {
+        writer.queue(SetForegroundColor(color))?;
+    }
+    Ok(())
 }
 
 fn draw_too_small_notice(buffer: &mut Buffer, locale: Locale) {
@@ -274,5 +335,31 @@ mod tests {
         let output = String::from_utf8(output).unwrap();
         assert!(output.contains("中A"));
         assert!(!output.contains("\u{1b}[1;3H"));
+    }
+
+    #[test]
+    fn named_colors_use_basic_ansi_sgr_codes() {
+        let previous = Buffer::new(2, 1);
+        let mut current = Buffer::new(2, 1);
+        current.set_char(0, 0, 'a', Color::DarkRed, Color::DarkBlue);
+        current.set_char(1, 0, 'b', Color::Yellow, Color::Reset);
+        let mut output = Vec::new();
+        let mut foreground = Color::Reset;
+        let mut background = Color::Reset;
+
+        emit_buffer_diff(
+            &mut output,
+            &current,
+            &previous,
+            &mut foreground,
+            &mut background,
+        )
+        .unwrap();
+
+        let output = String::from_utf8(output).unwrap();
+        assert!(output.contains("\u{1b}[31m"));
+        assert!(output.contains("\u{1b}[44m"));
+        assert!(output.contains("\u{1b}[93m"));
+        assert!(!output.contains("\u{1b}[38;5;"));
     }
 }
