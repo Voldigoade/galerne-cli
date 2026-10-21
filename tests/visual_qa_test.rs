@@ -553,7 +553,7 @@ fn test_visual_qa_jump_apex_frame() {
 
     let rendered = buffer_to_string(&buf);
     println!("--- VISUAL QA: JUMP APEX FRAME ---\n{}", rendered);
-    assert!(rendered.contains("[#]") && rendered.contains('~'));
+    assert!(rendered.contains("<#>") && rendered.contains('~'));
 }
 
 #[test]

@@ -190,7 +190,7 @@ fn test_input_buffering_triggers_jump_on_landing() {
 }
 
 #[test]
-fn traveler_action_sprites_keep_the_scarf_pack_and_readable_head() {
+fn traveler_action_sprites_keep_the_scarf_vane_pack_and_readable_head() {
     let actions = [
         ActionState::Idle {
             cycle_timer: 0.0,
@@ -264,7 +264,8 @@ fn traveler_action_sprites_keep_the_scarf_pack_and_readable_head() {
         let artwork = sprite.join("\n");
 
         assert!(artwork.contains('~'), "Missing wind scarf in {action:?}");
-        assert!(artwork.contains("[#]"), "Missing travel pack in {action:?}");
+        assert!(artwork.contains("<#>"), "Missing vane pack in {action:?}");
+        assert!(artwork.contains('^'), "Missing wind crest in {action:?}");
         let face = if matches!(action, ActionState::Hit { .. }) {
             'x'
         } else {
@@ -272,5 +273,77 @@ fn traveler_action_sprites_keep_the_scarf_pack_and_readable_head() {
         };
         assert!(artwork.contains(face), "Missing face in {action:?}");
         assert!(!artwork.contains("==>"), "Cursor-like arm in {action:?}");
+    }
+}
+
+#[test]
+fn large_traveler_keeps_its_wind_crest_and_vane_pack_across_actions() {
+    let actions = [
+        ActionState::Idle {
+            cycle_timer: 0.0,
+            frame: 0,
+        },
+        ActionState::Running {
+            cycle_timer: 0.0,
+            frame: 0,
+        },
+        ActionState::Jumping {
+            phase: JumpPhase::Ascent,
+            vertical_velocity: -1.0,
+            elapsed_secs: 0.0,
+        },
+        ActionState::Jumping {
+            phase: JumpPhase::Apex,
+            vertical_velocity: 0.0,
+            elapsed_secs: 0.0,
+        },
+        ActionState::Jumping {
+            phase: JumpPhase::Descent,
+            vertical_velocity: 1.0,
+            elapsed_secs: 0.0,
+        },
+        ActionState::Jumping {
+            phase: JumpPhase::Landing,
+            vertical_velocity: 1.0,
+            elapsed_secs: 0.0,
+        },
+        ActionState::Gliding {
+            elapsed_secs: 0.0,
+            vertical_velocity: 0.0,
+        },
+        ActionState::Sliding {
+            remaining_secs: 0.2,
+        },
+        ActionState::Dashing {
+            remaining_secs: 0.1,
+        },
+        ActionState::Hit {
+            remaining_secs: 0.1,
+        },
+        ActionState::Activating {
+            remaining_secs: 0.1,
+        },
+        ActionState::Respawning {
+            remaining_secs: 0.1,
+        },
+    ];
+
+    let mut player = RunnerPlayer::new(100.0, 45.0);
+    for action in actions {
+        player.action = action;
+        let (sprite, left_offset) = player.current_sprite_for_terminal(236, 53);
+        let artwork = sprite.join("\n");
+
+        assert_eq!(left_offset, 12);
+        assert!(artwork.contains('^'), "Missing wind crest in {action:?}");
+        assert!(artwork.contains("<#>"), "Missing vane pack in {action:?}");
+        assert!(artwork.contains('~'), "Missing scarf in {action:?}");
+        assert!(!artwork.contains("[#]"), "Found old pack in {action:?}");
+        let face = if matches!(action, ActionState::Hit { .. }) {
+            'x'
+        } else {
+            'o'
+        };
+        assert!(artwork.contains(face), "Missing face in {action:?}");
     }
 }
