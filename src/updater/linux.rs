@@ -36,7 +36,6 @@ pub fn apply_linux_update(target_exe: &Path, new_binary_bytes: &[u8]) -> io::Res
     let temp_path = parent.join(format!(".galerne_new_{}", pid));
     let backup_path = parent.join(format!(".galerne_old_{}", pid));
 
-    // 1. Write new binary to temporary sibling file
     let write_res = (|| -> io::Result<()> {
         let mut file = File::create(&temp_path).map_err(|e| {
             io::Error::other(format!(
@@ -59,7 +58,7 @@ pub fn apply_linux_update(target_exe: &Path, new_binary_bytes: &[u8]) -> io::Res
         return Err(e);
     }
 
-    // 2. Backup existing executable
+    // Keep the old executable until the replacement passes its version check.
     let had_existing = target_exe.exists();
     if had_existing {
         if let Err(e) = fs::rename(target_exe, &backup_path) {
@@ -71,7 +70,6 @@ pub fn apply_linux_update(target_exe: &Path, new_binary_bytes: &[u8]) -> io::Res
         }
     }
 
-    // 3. Atomically rename temporary file over target executable
     if let Err(e) = fs::rename(&temp_path, target_exe) {
         // Restore backup if rename failed
         if had_existing {
@@ -84,7 +82,6 @@ pub fn apply_linux_update(target_exe: &Path, new_binary_bytes: &[u8]) -> io::Res
         )));
     }
 
-    // 4. Smoke-test the newly installed executable
     let smoke_res = (|| -> io::Result<()> {
         let output = Command::new(target_exe)
             .arg("--version")
@@ -110,7 +107,6 @@ pub fn apply_linux_update(target_exe: &Path, new_binary_bytes: &[u8]) -> io::Res
         Ok(())
     })();
 
-    // 5. If smoke test failed, roll back!
     if let Err(e) = smoke_res {
         let _ = fs::remove_file(target_exe);
         if had_existing {
@@ -122,7 +118,6 @@ pub fn apply_linux_update(target_exe: &Path, new_binary_bytes: &[u8]) -> io::Res
         )));
     }
 
-    // 6. Success: clean backup
     if had_existing {
         let _ = fs::remove_file(&backup_path);
     }

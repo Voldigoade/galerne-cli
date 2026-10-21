@@ -230,9 +230,7 @@ impl DurationHistory {
             return Self::default();
         }
 
-        // Check if file is valid JSON
         if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
-            // Check schema_version
             if val.get("schema_version").and_then(|v| v.as_u64())
                 == Some(HISTORY_SCHEMA_VERSION as u64)
             {

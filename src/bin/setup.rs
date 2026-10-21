@@ -114,13 +114,11 @@ fn perform_install(silent: bool) {
         }
     }
 
-    // 1. Create installation directory
     if let Err(e) = fs::create_dir_all(&install_dir) {
         eprintln!("[✕] Error creating destination directory: {}", e);
         std::process::exit(1);
     }
 
-    // 2. Obtain binary bytes (from embedded binary or sibling binary)
     let binary_bytes = if !EMBEDDED_BINARY.is_empty() {
         EMBEDDED_BINARY.to_vec()
     } else {
@@ -152,7 +150,6 @@ fn perform_install(silent: bool) {
         }
     };
 
-    // 3. Write target binary
     let write_res = (|| -> io::Result<()> {
         let mut file = File::create(&target_bin)?;
         file.write_all(&binary_bytes)?;
@@ -175,10 +172,8 @@ fn perform_install(silent: bool) {
     }
     println!("[✓] Installed binary: {}", target_bin.display());
 
-    // 4. Update user PATH environment variable
     add_to_user_path(&install_dir);
 
-    // 5. Install shell hooks
     if let Err(e) = galerne::shell::setup_all_shells() {
         eprintln!(
             "[!] Warning: Shell integration setup encountered an issue: {}",
@@ -214,7 +209,6 @@ fn perform_uninstall(silent: bool) {
         }
     }
 
-    // 1. Remove binary
     if target_bin.exists() {
         if let Err(e) = fs::remove_file(&target_bin) {
             eprintln!("[!] Warning removing binary: {}", e);
@@ -223,10 +217,8 @@ fn perform_uninstall(silent: bool) {
         }
     }
 
-    // 2. Remove shell hooks
     let _ = galerne::shell::uninstall_all_shells(false);
 
-    // 3. Remove from user PATH
     remove_from_user_path(&install_dir);
 
     println!("\n[✓] Galerne uninstalled cleanly.");

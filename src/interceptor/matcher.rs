@@ -57,7 +57,6 @@ pub fn match_command(args: &[String]) -> Option<CommandClass> {
 
     let bin = PathClean::basename(&args[0]).to_lowercase();
 
-    // 1. Check for watch flags or interactive indicators anywhere in arguments
     for arg in args.iter().skip(1) {
         let lower = arg.to_lowercase();
         if lower == "--watch" || lower == "-w" || lower == "watch" || lower == "--interactive" {
@@ -65,7 +64,6 @@ pub fn match_command(args: &[String]) -> Option<CommandClass> {
         }
     }
 
-    // 2. Exclude known interactive binaries and shells
     if matches!(
         bin.as_str(),
         "python"
@@ -92,7 +90,6 @@ pub fn match_command(args: &[String]) -> Option<CommandClass> {
         return None;
     }
 
-    // 3. Match Cargo commands
     if bin == "cargo" {
         if args.len() < 2 {
             return None;
@@ -109,7 +106,6 @@ pub fn match_command(args: &[String]) -> Option<CommandClass> {
         };
     }
 
-    // 4. Match JavaScript ecosystem
     if bin == "npm" {
         if args.len() < 2 {
             return None;
@@ -139,7 +135,6 @@ pub fn match_command(args: &[String]) -> Option<CommandClass> {
         return Some(CommandClass::YarnInstall);
     }
 
-    // 5. Match Docker builds
     if bin == "docker" {
         if args.len() >= 2 && args[1].to_lowercase() == "build" {
             return Some(CommandClass::DockerBuild);
@@ -152,7 +147,6 @@ pub fn match_command(args: &[String]) -> Option<CommandClass> {
         }
     }
 
-    // 6. Native build systems
     if bin == "make" {
         return Some(CommandClass::Make);
     }
@@ -163,7 +157,6 @@ pub fn match_command(args: &[String]) -> Option<CommandClass> {
         return Some(CommandClass::CmakeBuild);
     }
 
-    // 7. Go / Python test
     if bin == "go" && args.len() >= 2 {
         let sub = args[1].to_lowercase();
         if sub == "build" {
