@@ -97,3 +97,35 @@ fn test_visual_qa_wide_terminal_200_cols() {
     // Ensure no panic or wrap artifact on wide viewport
     assert_eq!(rendered.lines().count(), 30);
 }
+
+#[test]
+fn test_visual_qa_large_terminal_236x53() {
+    let mut game = RunnerState::new(236, 53, 0x12345678);
+    for _ in 0..30 {
+        game.update(0.033, None);
+    }
+
+    let mut buf = Buffer::new(236, 53);
+    game.render(&mut buf, Locale::En);
+
+    let rendered = buffer_to_string(&buf);
+    let lines: Vec<&str> = rendered.lines().collect();
+    assert_eq!(lines.len(), 53);
+
+    // Verify non-empty content across all vertical bands in 236x53
+    // Sky band (rows 1..8)
+    let sky_has_content = (1..8).any(|y| lines[y].chars().any(|c| c != ' '));
+    assert!(sky_has_content, "Sky band must contain wind/atmospheric art");
+
+    // Distant horizon band (rows 9..24)
+    let far_has_content = (9..24).any(|y| lines[y].chars().any(|c| c != ' '));
+    assert!(far_has_content, "Far horizon must contain colossal tower/arch silhouettes");
+
+    // Midground band (rows 25..45)
+    let mid_has_content = (25..45).any(|y| lines[y].chars().any(|c| c != ' '));
+    assert!(mid_has_content, "Midground must contain shanties/cables");
+
+    // Ground and pier drop (rows 46..52)
+    let pier_has_content = (48..53).any(|y| lines[y].chars().any(|c| c != ' '));
+    assert!(pier_has_content, "Lower region must contain viaduct trusses and pier drops");
+}

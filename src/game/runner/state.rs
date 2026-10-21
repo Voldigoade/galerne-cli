@@ -30,6 +30,8 @@ pub struct RunnerSnapshot {
     pub run_duration: f32,
     pub onboarding_jump_done: bool,
     pub onboarding_slide_done: bool,
+    #[serde(default)]
+    pub relay_restored: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -51,6 +53,8 @@ pub struct RunnerState {
     pub active_magnet_timer: f32,
     pub active_multiplier_timer: f32,
     pub active_surge_timer: f32,
+    #[serde(default)]
+    pub relay_restored: bool,
 }
 
 impl RunnerState {
@@ -76,6 +80,7 @@ impl RunnerState {
             active_magnet_timer: 0.0,
             active_multiplier_timer: 0.0,
             active_surge_timer: 0.0,
+            relay_restored: false,
         }
     }
 
@@ -104,6 +109,7 @@ impl RunnerState {
             run_duration: self.run_duration,
             onboarding_jump_done: self.onboarding_jump_done,
             onboarding_slide_done: self.onboarding_slide_done,
+            relay_restored: self.relay_restored,
         }
     }
 
@@ -122,6 +128,7 @@ impl RunnerState {
         self.run_duration = snap.run_duration;
         self.onboarding_jump_done = snap.onboarding_jump_done;
         self.onboarding_slide_done = snap.onboarding_slide_done;
+        self.relay_restored = snap.relay_restored;
     }
 
     pub fn start_completion_transition(&mut self, success: bool) {
@@ -356,7 +363,9 @@ impl RunnerState {
         let ground_y = self.world.ground_y;
 
         // 1. Render multi-layer parallax backdrop (sky, skyline, midground wires, rails)
-        self.world.parallax.render_backdrop(buf, ground_y);
+        self.world
+            .parallax
+            .render_backdrop(buf, ground_y, self.relay_restored);
 
         // 2. Render chunk obstacles and items
         for chunk in self.world.active_chunks() {

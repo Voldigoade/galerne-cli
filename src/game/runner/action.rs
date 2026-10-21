@@ -29,11 +29,28 @@ pub enum ActionState {
         vertical_velocity: f32,
         elapsed_secs: f32,
     },
+    Gliding {
+        elapsed_secs: f32,
+        vertical_velocity: f32,
+    },
     Sliding {
         remaining_secs: f32,
     },
     Dashing {
         remaining_secs: f32,
+    },
+    Hit {
+        remaining_secs: f32,
+    },
+    Activating {
+        remaining_secs: f32,
+    },
+    Respawning {
+        remaining_secs: f32,
+    },
+    Idle {
+        cycle_timer: f32,
+        frame: u8,
     },
 }
 

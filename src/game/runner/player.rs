@@ -4,9 +4,9 @@ use serde::{Deserialize, Serialize};
 
 use super::action::{ActionState, InputBuffer, JumpPhase, PlayerInput};
 
-pub const PLAYER_WIDTH: usize = 5;
+pub const PLAYER_WIDTH: usize = 7;
 pub const PLAYER_HEIGHT: usize = 4;
-pub const SLIDE_WIDTH: usize = 6;
+pub const SLIDE_WIDTH: usize = 10;
 pub const SLIDE_HEIGHT: usize = 2;
 
 pub const JUMP_INITIAL_VELOCITY: f32 = -23.0;
@@ -162,6 +162,17 @@ impl RunnerPlayer {
         self.input_buffer.update(dt);
 
         match self.action {
+            ActionState::Idle {
+                ref mut cycle_timer,
+                ref mut frame,
+            } => {
+                self.y = ground_y;
+                *cycle_timer += dt;
+                if *cycle_timer >= 0.25 {
+                    *cycle_timer = 0.0;
+                    *frame = (*frame + 1) % 2;
+                }
+            }
             ActionState::Running {
                 ref mut cycle_timer,
                 ref mut frame,
@@ -170,7 +181,7 @@ impl RunnerPlayer {
                 *cycle_timer += dt;
                 if *cycle_timer >= 0.12 {
                     *cycle_timer = 0.0;
-                    *frame = (*frame + 1) % 3;
+                    *frame = (*frame + 1) % 4;
                 }
             }
             ActionState::Jumping {
@@ -180,7 +191,6 @@ impl RunnerPlayer {
             } => {
                 *elapsed_secs += dt;
 
-                // Apex float calculation: lower gravity around velocity zero
                 let gravity = if vertical_velocity.abs() < APEX_VELOCITY_THRESHOLD {
                     *phase = JumpPhase::Apex;
                     GRAVITY_APEX
@@ -198,7 +208,26 @@ impl RunnerPlayer {
                 if self.y >= ground_y {
                     self.y = ground_y;
 
-                    // Check buffered input immediately upon touchdown!
+                    if let Some(buffered) = self.input_buffer.pop() {
+                        self.handle_input(buffered, ground_y);
+                    } else {
+                        self.action = ActionState::Running {
+                            cycle_timer: 0.0,
+                            frame: 0,
+                        };
+                    }
+                }
+            }
+            ActionState::Gliding {
+                ref mut elapsed_secs,
+                ref mut vertical_velocity,
+            } => {
+                *elapsed_secs += dt;
+                *vertical_velocity = (*vertical_velocity + 10.0 * dt).min(6.0);
+                self.y += *vertical_velocity * dt;
+
+                if self.y >= ground_y {
+                    self.y = ground_y;
                     if let Some(buffered) = self.input_buffer.pop() {
                         self.handle_input(buffered, ground_y);
                     } else {
@@ -244,24 +273,67 @@ impl RunnerPlayer {
                     }
                 }
             }
+            ActionState::Hit {
+                ref mut remaining_secs,
+            } => {
+                *remaining_secs -= dt;
+                if *remaining_secs <= 0.0 {
+                    self.action = ActionState::Running {
+                        cycle_timer: 0.0,
+                        frame: 0,
+                    };
+                }
+            }
+            ActionState::Activating {
+                ref mut remaining_secs,
+            } => {
+                *remaining_secs -= dt;
+                if *remaining_secs <= 0.0 {
+                    self.action = ActionState::Running {
+                        cycle_timer: 0.0,
+                        frame: 0,
+                    };
+                }
+            }
+            ActionState::Respawning {
+                ref mut remaining_secs,
+            } => {
+                *remaining_secs -= dt;
+                if *remaining_secs <= 0.0 {
+                    self.action = ActionState::Running {
+                        cycle_timer: 0.0,
+                        frame: 0,
+                    };
+                }
+            }
         }
     }
 
     /// Returns authored multi-cell ASCII sprite lines for current visual state.
     pub fn current_sprite(&self) -> &'static [&'static str] {
         match self.action {
+            ActionState::Idle { frame, .. } => match frame {
+                0 => &[" ,(o)  ", "<{}>~  ", " /|    ", " / \\   "],
+                _ => &[" ,(o)~ ", "<{}>-  ", " /|    ", " / \\   "],
+            },
             ActionState::Running { frame, .. } => match frame {
-                0 => &[" [o] ", "--|>-", " / \\ ", "/   \\"],
-                1 => &[" [o]~", " /|==", " / | ", "<   \\"],
-                _ => &[" [o]=", "==|\\ ", "  | \\", " /   >"],
+                0 => &[" ,(o)~~", "<{}>== ", " /|    ", "/  \\   "],
+                1 => &[" ,(o)~-", "<{}>=  ", " / |   ", "<   \\  "],
+                2 => &[" ,(o)~~", "<{}>== ", " / |   ", " /  >  "],
+                _ => &[" ,(o)~-", "<{}>-  ", "  |\\   ", " /  |  "],
             },
             ActionState::Jumping { phase, .. } => match phase {
-                JumpPhase::Ascent => &[" [o]~", " /|\\ ", " / \\ ", "^   ^"],
-                JumpPhase::Apex => &["~[o]~", "--|--", " ( ) ", " \\ / "],
-                JumpPhase::Descent | JumpPhase::Landing => &[" [o] ", "\\/|\\/", "  |  ", " v v "],
+                JumpPhase::Ascent => &[" ,(o)^ ", "<{}/   ", " /|    ", "^   ^  "],
+                JumpPhase::Apex => &["~,(o)~ ", "={}>== ", " / \\   ", "(   )  "],
+                JumpPhase::Descent => &[" ,(o)  ", "<{}\\   ", " /|    ", "v   v  "],
+                JumpPhase::Landing => &[" ,(o)~ ", "<{}>-  ", " / \\   ", "_/ \\_  "],
             },
-            ActionState::Sliding { .. } => &["==[o]===", "--(____)-"],
-            ActionState::Dashing { .. } => &[">>[o]>", "==|===", " / \\==", ">>  >>"],
+            ActionState::Gliding { .. } => &["~,(o)~~", "={}>===", " ---   ", " > >   "],
+            ActionState::Sliding { .. } => &["==,(o)~~~~", "--<{}>---_"],
+            ActionState::Dashing { .. } => &[">>-(o)>>", ">>{}>===", " >>/ >> ", " >   >  "],
+            ActionState::Hit { .. } => &[" !,(x) ", " <{}\\  ", " < \\   ", "/   \\  "],
+            ActionState::Activating { .. } => &[" ,(o)+*", "<{}>-~ ", " /|~   ", " / \\   "],
+            ActionState::Respawning { .. } => &[" ( . ) ", "~{ o }~", " /|\\   ", "/   \\  "],
         }
     }
 }
