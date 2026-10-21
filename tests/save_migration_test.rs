@@ -40,14 +40,77 @@ fn test_v1_save_fixture_loads_perfectly() {
     let encoded_v1 = encode_with_header(1, &payload);
     fs::write(manager.primary_save_path(), &encoded_v1).expect("write v1 save");
 
-    // Load must migrate cleanly from v1 to v2 while preserving all progression
+    // Load must migrate cleanly from v1 to v3 while preserving all progression
     let loaded = manager.load().expect("load v1 save");
-    assert_eq!(loaded.version, 2);
+    assert_eq!(loaded.version, 3);
     assert_eq!(loaded.currency_shards, 1250);
+    assert_eq!(
+        loaded
+            .inventory
+            .count(galerne::storage::ItemKind::GaleShard),
+        1250
+    );
     assert_eq!(loaded.total_enemies_killed, 450);
     assert_eq!(loaded.workshop.base_damage_level, 3);
     assert!(loaded.settings.auto_activate);
     assert!(loaded.active_run.is_none());
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[test]
+fn test_v2_save_migrates_cleanly_to_v3() {
+    let temp_dir = std::env::temp_dir().join(format!("galerne_v2_to_v3_{}", std::process::id()));
+    let _ = fs::remove_dir_all(&temp_dir);
+    fs::create_dir_all(&temp_dir).expect("create temp dir");
+
+    let manager = SaveManager::with_dir(&temp_dir);
+
+    let v2_json = serde_json::json!({
+        "version": 2,
+        "total_play_time_secs": 850,
+        "total_wait_time_saved_secs": 620,
+        "total_runs_started": 9,
+        "total_distance_traveled": 342.5,
+        "total_enemies_killed": 25,
+        "total_bosses_killed": 0,
+        "currency_shards": 850,
+        "workshop": {
+            "base_health_level": 2,
+            "base_damage_level": 1,
+            "move_speed_level": 1,
+            "magnet_radius_level": 0,
+            "shard_multiplier_level": 1
+        },
+        "active_run": null,
+        "settings": {
+            "color_enabled": true,
+            "animations_enabled": true,
+            "auto_activate": true,
+            "anti_flicker_delay_ms": 8000
+        }
+    });
+
+    let payload = serde_json::to_vec(&v2_json).expect("serialize v2");
+    let encoded_v2 = encode_with_header(2, &payload);
+    fs::write(manager.primary_save_path(), &encoded_v2).expect("write v2 save");
+
+    let loaded = manager.load().expect("load v2 save");
+    assert_eq!(loaded.version, 3);
+    assert_eq!(loaded.currency_shards, 850);
+    assert_eq!(
+        loaded
+            .inventory
+            .count(galerne::storage::ItemKind::GaleShard),
+        850
+    );
+    assert_eq!(loaded.total_distance_traveled, 342.5);
+    assert_eq!(
+        loaded.world_progress.current_region_id,
+        "cinder_line_viaduct"
+    );
+    assert!(!loaded.world_progress.relay_restored);
+    assert!(!loaded.companion.met_kael);
 
     let _ = fs::remove_dir_all(&temp_dir);
 }
@@ -121,13 +184,13 @@ fn test_v1_save_with_arena_active_run_migrates_cleanly_to_v2() {
     fs::write(manager.primary_save_path(), &encoded).expect("write v1 save");
 
     let loaded = manager.load().expect("load and migrate");
-    assert_eq!(loaded.version, 2);
+    assert_eq!(loaded.version, 3);
     assert_eq!(loaded.currency_shards, 420);
     assert_eq!(loaded.total_enemies_killed, 90);
     assert_eq!(loaded.workshop.base_damage_level, 2);
     assert!(
         loaded.active_run.is_none(),
-        "Old arena active run must be cleanly discarded on v2 migration"
+        "Old arena active run must be cleanly discarded on v3 migration"
     );
 
     let _ = fs::remove_dir_all(&temp_dir);
@@ -153,7 +216,7 @@ fn test_pre_migration_backup_creation() {
 
     // Perform migration backup verification
     let backup_path = manager
-        .create_migration_backup(1, 2)
+        .create_migration_backup(1, 3)
         .expect("create migration backup");
 
     assert!(
@@ -162,7 +225,7 @@ fn test_pre_migration_backup_creation() {
     );
     let backup_name = backup_path.file_name().unwrap().to_string_lossy();
     assert!(
-        backup_name.starts_with("save.dat.migration_v1_to_v2."),
+        backup_name.starts_with("save.dat.migration_v1_to_v3."),
         "Backup filename must clearly identify migration source and target versions"
     );
 

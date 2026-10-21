@@ -5,7 +5,112 @@ use serde::{Deserialize, Serialize};
 pub use crate::game::runner::RunnerSnapshot;
 use crate::ui::i18n::Locale;
 
-pub const CURRENT_SCHEMA_VERSION: u32 = 2;
+pub const CURRENT_SCHEMA_VERSION: u32 = 3;
+
+/// Traversal and world item kinds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ItemKind {
+    GaleShard,
+    ResonanceCore,
+    InductionFilament,
+    AncientCompass,
+}
+
+impl ItemKind {
+    pub fn name_key(&self) -> &'static str {
+        match self {
+            Self::GaleShard => "item_gale_shard_name",
+            Self::ResonanceCore => "item_resonance_core_name",
+            Self::InductionFilament => "item_induction_filament_name",
+            Self::AncientCompass => "item_ancient_compass_name",
+        }
+    }
+
+    pub fn desc_key(&self) -> &'static str {
+        match self {
+            Self::GaleShard => "item_gale_shard_desc",
+            Self::ResonanceCore => "item_resonance_core_desc",
+            Self::InductionFilament => "item_induction_filament_desc",
+            Self::AncientCompass => "item_ancient_compass_desc",
+        }
+    }
+}
+
+/// A slot in the player's compact inventory.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InventorySlot {
+    pub item: ItemKind,
+    pub count: u32,
+}
+
+/// Compact persistent inventory with unlimited capacity.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Inventory {
+    pub items: Vec<InventorySlot>,
+}
+
+impl Inventory {
+    pub fn add(&mut self, item: ItemKind, count: u32) {
+        if count == 0 {
+            return;
+        }
+        if let Some(slot) = self.items.iter_mut().find(|s| s.item == item) {
+            slot.count = slot.count.saturating_add(count);
+        } else {
+            self.items.push(InventorySlot { item, count });
+        }
+    }
+
+    pub fn count(&self, item: ItemKind) -> u32 {
+        self.items
+            .iter()
+            .find(|s| s.item == item)
+            .map(|s| s.count)
+            .unwrap_or(0)
+    }
+
+    pub fn has(&self, item: ItemKind) -> bool {
+        self.count(item) > 0
+    }
+}
+
+/// Progress across the authored world and regional objectives.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorldProgress {
+    pub current_region_id: String,
+    pub checkpoints_unlocked: Vec<u32>,
+    pub relay_restored: bool,
+    pub secret_cache_found: bool,
+    pub high_truss_explored: bool,
+}
+
+impl Default for WorldProgress {
+    fn default() -> Self {
+        Self {
+            current_region_id: "cinder_line_viaduct".to_string(),
+            checkpoints_unlocked: vec![0], // Initial start point is checkpoint 0
+            relay_restored: false,
+            secret_cache_found: false,
+            high_truss_explored: false,
+        }
+    }
+}
+
+/// State of the first companion (Kael, the Gantry Watcher).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CompanionProgress {
+    pub met_kael: bool,
+    pub spoken_to_kael: bool,
+    pub kael_at_refuge: bool,
+}
+
+/// State and facilities of the persistent base camp (The Refuge).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RefugeProgress {
+    pub power_restored: bool,
+    pub workbench_unlocked: bool,
+    pub visits_count: u32,
+}
 
 /// The complete persistent game state.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -24,6 +129,14 @@ pub struct SaveState {
     pub workshop: WorkshopLevels,
     pub active_run: Option<RunnerSnapshot>,
     pub settings: GameSettings,
+    #[serde(default)]
+    pub inventory: Inventory,
+    #[serde(default)]
+    pub world_progress: WorldProgress,
+    #[serde(default)]
+    pub companion: CompanionProgress,
+    #[serde(default)]
+    pub refuge: RefugeProgress,
 }
 
 impl Default for SaveState {
@@ -40,6 +153,10 @@ impl Default for SaveState {
             workshop: WorkshopLevels::default(),
             active_run: None,
             settings: GameSettings::default(),
+            inventory: Inventory::default(),
+            world_progress: WorldProgress::default(),
+            companion: CompanionProgress::default(),
+            refuge: RefugeProgress::default(),
         }
     }
 }

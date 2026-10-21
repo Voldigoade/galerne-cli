@@ -38,6 +38,7 @@ fn test_windows_update_preserves_save_data_and_settings() {
             anti_flicker_delay_ms: 8000,
             locale: None,
         },
+        ..Default::default()
     };
 
     save_manager.save(&existing_state).expect("save state");
