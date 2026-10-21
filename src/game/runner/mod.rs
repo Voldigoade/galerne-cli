@@ -1,4 +1,4 @@
-//! Terminal-native endless runner subsystem.
+//! Terminal-native traversal and exploration systems.
 
 pub mod action;
 pub mod items;

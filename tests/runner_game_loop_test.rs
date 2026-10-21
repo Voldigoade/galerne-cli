@@ -1,5 +1,6 @@
 use galerne::game::runner::action::PlayerInput;
 use galerne::game::runner::state::RunnerState;
+use galerne::game::runner::wind::TailwindTier;
 use galerne::terminal::buffer::Buffer;
 use galerne::ui::i18n::{t, Locale, ALL_LOCALES};
 
@@ -104,6 +105,35 @@ fn test_runner_snapshot_deterministic_resumption() {
     assert_eq!(game2.shards_collected, game1.shards_collected);
     assert_eq!(game2.player.y, game1.player.y);
     assert_eq!(game2.world.scroll_x, game1.world.scroll_x);
+}
+
+#[test]
+fn resumed_task_keeps_the_current_build_tailwind() {
+    let mut previous_task = RunnerState::new(80, 24, 0x1111);
+    previous_task.tailwind_tier = TailwindTier::Tier4;
+    let mut old_snapshot = serde_json::to_value(previous_task.create_snapshot()).unwrap();
+    old_snapshot["tailwind_tier"] = serde_json::json!("Tier4");
+    let snapshot = serde_json::from_value(old_snapshot).unwrap();
+
+    let mut resumed_task = RunnerState::new(80, 24, 0x2222);
+    resumed_task.tailwind_tier = TailwindTier::Tier2;
+    resumed_task.resume_snapshot(&snapshot);
+
+    assert_eq!(resumed_task.tailwind_tier, TailwindTier::Tier2);
+}
+
+#[test]
+fn manual_resume_does_not_inherit_a_previous_build_tailwind() {
+    let mut previous_task = RunnerState::new(80, 24, 0x1111);
+    previous_task.tailwind_tier = TailwindTier::Tier4;
+    let mut old_snapshot = serde_json::to_value(previous_task.create_snapshot()).unwrap();
+    old_snapshot["tailwind_tier"] = serde_json::json!("Tier4");
+    let snapshot = serde_json::from_value(old_snapshot).unwrap();
+
+    let mut manual_game = RunnerState::new(80, 24, 0x2222);
+    manual_game.resume_snapshot(&snapshot);
+
+    assert_eq!(manual_game.tailwind_tier, TailwindTier::None);
 }
 
 #[test]

@@ -48,8 +48,6 @@ pub struct RunnerSnapshot {
     pub companion_met: bool,
     #[serde(default)]
     pub secret_cache_found: bool,
-    #[serde(default)]
-    pub tailwind_tier: TailwindTier,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -178,7 +176,6 @@ impl RunnerState {
             last_checkpoint_distance: self.last_checkpoint_distance,
             companion_met: self.companion_met,
             secret_cache_found: self.secret_cache_found,
-            tailwind_tier: self.tailwind_tier,
         }
     }
 
@@ -203,7 +200,6 @@ impl RunnerState {
         self.last_checkpoint_distance = snap.last_checkpoint_distance;
         self.companion_met = snap.companion_met;
         self.secret_cache_found = snap.secret_cache_found;
-        self.tailwind_tier = snap.tailwind_tier;
     }
 
     pub fn start_completion_transition(&mut self, success: bool) {
