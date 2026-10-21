@@ -1,10 +1,12 @@
 //! Distinct enemy archetypes and boss encounters.
 
+use serde::{Deserialize, Serialize};
+
 use crate::game::weapons::Projectile;
 use crate::terminal::buffer::{Buffer, Color, Style};
 
 /// Archetypes of adversaries spawned in the arena.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EnemyKind {
     Drifter,
     Swarmer,
@@ -14,7 +16,7 @@ pub enum EnemyKind {
 }
 
 /// An enemy entity with distinct behavioral state.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Enemy {
     pub x: f32,
     pub y: f32,

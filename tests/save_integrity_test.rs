@@ -2,7 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use galerne::storage::manager::SaveManager;
-use galerne::storage::schema::{ActiveRunSnapshot, SaveState, CURRENT_SCHEMA_VERSION};
+use galerne::storage::schema::{SaveState, CURRENT_SCHEMA_VERSION};
 
 fn temp_test_dir(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join("galerne_tests").join(name);
@@ -101,23 +101,31 @@ fn test_active_run_persistence_and_resume() {
     let dir = temp_test_dir("active_run");
     let manager = SaveManager::with_dir(dir);
 
+    let mut game = galerne::game::state::GameState::new(80, 24, 0x12345678);
+    game.player.hp = 75.0;
+    game.player.max_hp = 120.0;
+    game.player.x = 25.5;
+    game.player.y = 12.3;
+    game.player.level = 4;
+    game.player.xp = 15;
+    game.player.shards = 8;
+    game.weapon.damage = 35.0;
+    game.weapon.multishot = 2;
+    game.enemies.push(galerne::game::enemies::Enemy::new(
+        10.0,
+        10.0,
+        galerne::game::enemies::EnemyKind::Charger,
+    ));
+    game.gems.push(galerne::game::state::XpGem {
+        x: 5.0,
+        y: 5.0,
+        value: 50,
+        is_shard: true,
+    });
+
+    let snapshot = game.create_snapshot();
     let state = SaveState {
-        active_run: Some(ActiveRunSnapshot {
-            player_hp: 75.0,
-            player_max_hp: 120.0,
-            player_x: 25.0,
-            player_y: 12.0,
-            player_level: 4,
-            player_xp: 15,
-            shards_collected: 8,
-            weapon_damage: 35.0,
-            weapon_cooldown: 0.36,
-            weapon_multishot: 2,
-            weapon_piercing: 2,
-            wave: 3,
-            run_duration: 65.5,
-            seed: 987654321,
-        }),
+        active_run: Some(snapshot),
         ..Default::default()
     };
 
@@ -125,8 +133,64 @@ fn test_active_run_persistence_and_resume() {
 
     let loaded = manager.load().expect("load active run");
     assert!(loaded.active_run.is_some());
-    let run = loaded.active_run.unwrap();
-    assert_eq!(run.player_hp, 75.0);
-    assert_eq!(run.wave, 3);
-    assert_eq!(run.weapon_multishot, 2);
+    let loaded_snap = loaded.active_run.unwrap();
+
+    let mut restored_game = galerne::game::state::GameState::new(80, 24, 0);
+    restored_game.resume_snapshot(&loaded_snap);
+
+    assert_eq!(restored_game.player.hp, 75.0);
+    assert_eq!(restored_game.player.x, 25.5);
+    assert_eq!(restored_game.player.level, 4);
+    assert_eq!(restored_game.player.shards, 8);
+    assert_eq!(restored_game.weapon.damage, 35.0);
+    assert_eq!(restored_game.weapon.multishot, 2);
+    assert_eq!(restored_game.enemies.len(), 1);
+    assert_eq!(
+        restored_game.enemies[0].kind,
+        galerne::game::enemies::EnemyKind::Charger
+    );
+    assert_eq!(restored_game.gems.len(), 1);
+    assert!(restored_game.gems[0].is_shard);
+    assert_eq!(restored_game.gems[0].value, 50);
+    assert_eq!(restored_game.rng.state(), game.rng.state());
+}
+
+#[test]
+fn test_archive_creation_and_restoration() {
+    let dir = temp_test_dir("archive_restore");
+    let manager = SaveManager::with_dir(&dir);
+
+    // Initial state with career progression
+    let state = SaveState {
+        currency_shards: 350,
+        total_runs_started: 12,
+        total_enemies_killed: 88,
+        ..Default::default()
+    };
+    manager.save(&state).expect("saved initial state");
+
+    // Perform archive and reset
+    let archive_path = manager.archive_and_reset().expect("archive and reset");
+    assert!(archive_path.exists());
+
+    // After reset, save state must be fresh default
+    let fresh_state = manager.load().expect("load fresh");
+    assert_eq!(fresh_state.currency_shards, 0);
+    assert_eq!(fresh_state.total_enemies_killed, 0);
+
+    // List archives
+    let archives = manager.list_archives().expect("list archives");
+    assert_eq!(archives.len(), 1);
+    let (archive_name, _) = &archives[0];
+
+    // Restore the archive
+    manager
+        .restore_archive(archive_name)
+        .expect("restore archive");
+
+    // Load state again: career progression must be fully restored!
+    let restored_state = manager.load().expect("load restored");
+    assert_eq!(restored_state.currency_shards, 350);
+    assert_eq!(restored_state.total_runs_started, 12);
+    assert_eq!(restored_state.total_enemies_killed, 88);
 }

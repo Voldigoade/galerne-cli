@@ -1,10 +1,12 @@
 //! In-run leveling upgrades and selection draft.
 
+use serde::{Deserialize, Serialize};
+
 use crate::game::state::FastRng;
 use crate::terminal::buffer::{Buffer, Color, Style};
 
 /// Available in-run enhancement types.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum UpgradeKind {
     DamageBoost,
     FireRateBoost,
@@ -52,7 +54,7 @@ impl UpgradeKind {
 }
 
 /// A 3-choice upgrade draft presented on level up.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UpgradeDraft {
     pub options: [UpgradeKind; 3],
     pub selected: usize,

@@ -11,9 +11,9 @@ use crate::game::state::{GameInput, GameState};
 use crate::interceptor::history::DurationHistory;
 use crate::interceptor::matcher::match_command;
 use crate::interceptor::process::ProcessSupervisor;
+use crate::interceptor::signal;
 use crate::interceptor::transition::run_completion_transition;
 use crate::storage::manager::SaveManager;
-use crate::storage::schema::ActiveRunSnapshot;
 use crate::storage::workshop::apply_workshop_to_game;
 use crate::terminal::engine::Engine;
 use crate::terminal::guard::TerminalGuard;
@@ -28,6 +28,18 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
     let save_manager = SaveManager::default_paths();
     let mut save_state = save_manager.load().unwrap_or_default();
 
+    // If auto-activation is disabled, execute directly without gameplay
+    if !save_state.settings.auto_activate {
+        let mut cmd = std::process::Command::new(&args[0]);
+        if args.len() > 1 {
+            cmd.args(&args[1..]);
+        }
+        let status = cmd.status()?;
+        return Ok(status
+            .code()
+            .unwrap_or(if status.success() { 0 } else { 1 }));
+    }
+
     let matched_class = match_command(args);
 
     let history_path = save_manager.data_dir().join("history.json");
@@ -38,6 +50,9 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
         .unwrap_or(false);
 
     let start_time = Instant::now();
+
+    // Install cross-platform Ctrl+C handler
+    signal::setup_handler();
 
     // Spawn child process
     let mut supervisor = ProcessSupervisor::spawn(args)?;
@@ -74,9 +89,9 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
     let mut game = GameState::new(engine.width(), engine.height(), rand_seed());
     apply_workshop_to_game(&save_state.workshop, &mut game);
 
-    // If an active run snapshot exists, resume it
+    // If an active run snapshot exists, resume it with exact deterministic state
     if let Some(ref snapshot) = save_state.active_run {
-        resume_snapshot(&mut game, snapshot);
+        game.resume_snapshot(snapshot);
     }
 
     let initial_xp = game.player.xp;
@@ -86,17 +101,19 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
     let mut last_frame = Instant::now();
     let mut input = GameInput::default();
     let mut left_game_view = false;
+    let mut child_completed_in_game = None;
 
-    let child_exit_status = loop {
+    while child_completed_in_game.is_none() && !left_game_view {
         // Check if child process has finished
         if let Some(status) = supervisor.try_wait()? {
-            break status;
+            child_completed_in_game = Some(status);
+            break;
         }
 
         // Handle user input
         while let Some(ev) = Engine::poll_event(Duration::from_millis(0))? {
             match ev {
-                // FIRST Ctrl+C: leaves game view immediately without killing child task!
+                // FIRST Ctrl+C or Esc/q: leaves game view immediately without killing child task!
                 Event::Key(k)
                     if k.modifiers.contains(KeyModifiers::CONTROL)
                         && k.code == KeyCode::Char('c') =>
@@ -140,7 +157,7 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
         }
 
         if left_game_view {
-            break supervisor.wait()?;
+            break;
         }
 
         // Tick simulation
@@ -165,14 +182,14 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
         if elapsed < target_frame_duration {
             thread::sleep(target_frame_duration - elapsed);
         }
-    };
+    }
 
     // Calculate progression earned during wait time
     let xp_gained = game.player.xp.saturating_sub(initial_xp);
     let shards_gained = game.player.shards.saturating_sub(initial_shards);
     let total_duration = start_time.elapsed().as_secs();
 
-    // Persist career stats and active run
+    // Persist career stats and exact active run
     save_state.total_play_time_secs += game.run_duration as u64;
     save_state.total_wait_time_saved_secs += total_duration;
     save_state.total_enemies_killed += game.enemies_killed;
@@ -181,40 +198,73 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
     if game.is_game_over {
         save_state.active_run = None;
     } else {
-        save_state.active_run = Some(create_snapshot(&game));
+        save_state.active_run = Some(game.create_snapshot());
     }
-    let _ = save_manager.save(&save_state);
 
-    if !left_game_view {
-        // Run short transition animation
-        run_completion_transition(
-            &mut engine,
-            child_exit_status.success(),
-            xp_gained,
-            shards_gained,
+    if let Err(e) = save_manager.save(&save_state) {
+        eprintln!(
+            "[galerne] Warning: Failed to persist career progression: {}",
+            e
         );
     }
 
-    // Drop terminal guard cleanly to restore normal terminal screen and cooked mode
-    drop(guard);
+    if let Some(status) = child_completed_in_game {
+        // Child completed while in game view: play brief completion transition
+        run_completion_transition(&mut engine, status.success(), xp_gained, shards_gained);
 
-    // Print buffered child output to normal terminal
-    print_buffered_logs(&supervisor);
+        // Restore terminal to cooked mode
+        drop(guard);
 
-    // If user pressed Ctrl+C to leave game view, now enter live task view
-    if left_game_view && !child_exit_status.success() {
-        // Child might have already been waited
+        // Print buffered child logs
+        print_buffered_logs(&supervisor);
+
+        if let Some(class) = matched_class {
+            history.record(class, total_duration as f32);
+            let _ = history.save_to_file(&history_path);
+        }
+
+        return Ok(status
+            .code()
+            .unwrap_or(if status.success() { 0 } else { 1 }));
     }
 
-    // Record timing history
+    // First Ctrl+C triggered: restore cooked terminal mode immediately
+    drop(guard);
+
+    // Print all buffered lines collected up to this moment
+    print_buffered_logs(&supervisor);
+
+    // Enter Task View: live streaming until child finishes or second Ctrl+C arrives
+    signal::reset();
+
+    let exit_status = loop {
+        // Check if child has terminated
+        if let Some(status) = supervisor.try_wait()? {
+            print_buffered_logs(&supervisor);
+            break status;
+        }
+
+        // Check for second Ctrl+C in task view
+        if signal::is_interrupted() {
+            let _ = supervisor.send_interrupt();
+            let status = supervisor.wait()?;
+            print_buffered_logs(&supervisor);
+            break status;
+        }
+
+        // Stream arriving output live
+        print_buffered_logs(&supervisor);
+        thread::sleep(Duration::from_millis(20));
+    };
+
     if let Some(class) = matched_class {
         history.record(class, total_duration as f32);
         let _ = history.save_to_file(&history_path);
     }
 
-    Ok(child_exit_status
+    Ok(exit_status
         .code()
-        .unwrap_or(if child_exit_status.success() { 0 } else { 1 }))
+        .unwrap_or(if exit_status.success() { 0 } else { 130 }))
 }
 
 fn print_buffered_logs(supervisor: &ProcessSupervisor) {
@@ -234,39 +284,4 @@ fn rand_seed() -> u64 {
         .duration_since(SystemTime::UNIX_EPOCH)
         .map(|d| d.as_nanos() as u64)
         .unwrap_or(0xdeadbeef12345678)
-}
-
-fn create_snapshot(game: &GameState) -> ActiveRunSnapshot {
-    ActiveRunSnapshot {
-        player_hp: game.player.hp,
-        player_max_hp: game.player.max_hp,
-        player_x: game.player.x,
-        player_y: game.player.y,
-        player_level: game.player.level,
-        player_xp: game.player.xp,
-        shards_collected: game.player.shards,
-        weapon_damage: game.weapon.damage,
-        weapon_cooldown: game.weapon.cooldown,
-        weapon_multishot: game.weapon.multishot,
-        weapon_piercing: game.weapon.piercing,
-        wave: game.wave,
-        run_duration: game.run_duration,
-        seed: rand_seed(),
-    }
-}
-
-fn resume_snapshot(game: &mut GameState, snap: &ActiveRunSnapshot) {
-    game.player.hp = snap.player_hp;
-    game.player.max_hp = snap.player_max_hp;
-    game.player.x = snap.player_x;
-    game.player.y = snap.player_y;
-    game.player.level = snap.player_level;
-    game.player.xp = snap.player_xp;
-    game.player.shards = snap.shards_collected;
-    game.weapon.damage = snap.weapon_damage;
-    game.weapon.cooldown = snap.weapon_cooldown;
-    game.weapon.multishot = snap.weapon_multishot;
-    game.weapon.piercing = snap.weapon_piercing;
-    game.wave = snap.wave;
-    game.run_duration = snap.run_duration;
 }

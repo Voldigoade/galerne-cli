@@ -2,6 +2,11 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::game::enemies::Enemy;
+use crate::game::state::XpGem;
+use crate::game::upgrades::UpgradeDraft;
+use crate::game::weapons::Projectile;
+
 pub const CURRENT_SCHEMA_VERSION: u32 = 1;
 
 /// The complete persistent game state.
@@ -46,23 +51,38 @@ pub struct WorkshopLevels {
     pub shard_multiplier_level: u32,
 }
 
-/// Snapshot of an interrupted active run for exact continuation.
+/// Snapshot of an interrupted active run for exact deterministic continuation.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ActiveRunSnapshot {
     pub player_hp: f32,
     pub player_max_hp: f32,
     pub player_x: f32,
     pub player_y: f32,
+    pub player_speed: f32,
+    pub player_magnet_radius: f32,
     pub player_level: u32,
     pub player_xp: u32,
+    pub player_next_level_xp: u32,
     pub shards_collected: u32,
     pub weapon_damage: f32,
     pub weapon_cooldown: f32,
+    pub weapon_cooldown_remaining: f32,
     pub weapon_multishot: u8,
     pub weapon_piercing: u8,
+    pub weapon_speed: f32,
+    pub weapon_range: f32,
     pub wave: u32,
+    pub wave_timer: f32,
+    pub spawn_timer: f32,
     pub run_duration: f32,
-    pub seed: u64,
+    pub enemies_killed: u32,
+    pub boss_spawned: bool,
+    pub rng_state: u64,
+    pub enemies: Vec<Enemy>,
+    pub projectiles: Vec<Projectile>,
+    pub gems: Vec<XpGem>,
+    pub pending_level_up: bool,
+    pub current_draft: Option<UpgradeDraft>,
 }
 
 /// User configurable settings.

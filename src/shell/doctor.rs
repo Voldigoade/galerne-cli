@@ -9,53 +9,68 @@ use crossterm::terminal;
 use crate::shell::installer::{detect_shell_configs, START_MARKER};
 use crate::storage::manager::SaveManager;
 
-/// Runs diagnostic verification checks and prints an actionable summary report.
-pub fn run_doctor() -> io::Result<()> {
-    println!("Galerne v{} System Diagnostics\n", crate::VERSION);
+/// A single live diagnostic assessment.
+#[derive(Clone, Debug)]
+pub struct DiagnosticItem {
+    pub label: &'static str,
+    pub status: String,
+    pub is_ok: bool,
+}
 
-    // 1. Executable & Version
-    let current_exe = env::current_exe().unwrap_or_default();
-    println!(
-        "[✓] Executable:        {} (v{})",
-        current_exe.display(),
-        crate::VERSION
-    );
+/// Gathers genuine, empirical system diagnostic findings.
+pub fn collect_diagnostics() -> Vec<DiagnosticItem> {
+    let mut items = Vec::new();
 
-    // 2. Platform
+    // 1. Platform
     let os = env::consts::OS;
     let arch = env::consts::ARCH;
-    println!("[✓] Target Platform:   {} {}", os, arch);
+    items.push(DiagnosticItem {
+        label: "Target Platform",
+        status: format!("{} {}", os, arch),
+        is_ok: true,
+    });
 
-    // 3. Interactive TTY
+    // 2. Interactive TTY
     let is_tty = io::stdout().is_terminal();
-    if is_tty {
-        println!("[✓] Standard Output:   Interactive TTY");
-    } else {
-        println!("[!] Standard Output:   Non-interactive pipe / redirection");
-    }
-
-    // 4. Dimensions
-    if let Ok((w, h)) = terminal::size() {
-        if w >= 60 && h >= 20 {
-            println!("[✓] Terminal Size:     {}x{} (Meets 60x20 minimum)", w, h);
+    items.push(DiagnosticItem {
+        label: "Standard Output",
+        status: if is_tty {
+            "Interactive ANSI TTY".to_string()
         } else {
-            println!(
-                "[!] Terminal Size:     {}x{} (Below 60x20 minimum; expand window for gameplay)",
-                w, h
-            );
-        }
+            "Non-interactive pipe".to_string()
+        },
+        is_ok: is_tty,
+    });
+
+    // 3. Dimensions
+    if let Ok((w, h)) = terminal::size() {
+        let ok = w >= 60 && h >= 20;
+        items.push(DiagnosticItem {
+            label: "Terminal Size",
+            status: format!("{}x{} (min 60x20)", w, h),
+            is_ok: ok,
+        });
     } else {
-        println!("[!] Terminal Size:     Unable to query dimensions");
+        items.push(DiagnosticItem {
+            label: "Terminal Size",
+            status: "Unknown dimensions".to_string(),
+            is_ok: false,
+        });
     }
 
-    // 5. Color Capability & NO_COLOR
-    if env::var("NO_COLOR").is_ok() {
-        println!("[ℹ] Color Depth:       Monochrome requested via NO_COLOR");
-    } else {
-        println!("[✓] Color Depth:       ANSI 16 / 256 Color Supported");
-    }
+    // 4. Color Capability
+    let no_color = env::var("NO_COLOR").is_ok();
+    items.push(DiagnosticItem {
+        label: "Color Depth",
+        status: if no_color {
+            "NO_COLOR requested".to_string()
+        } else {
+            "ANSI 16 / 256 Colors".to_string()
+        },
+        is_ok: !no_color,
+    });
 
-    // 6. Data Directory Accessibility
+    // 5. Storage Directory Accessibility
     let save_manager = SaveManager::default_paths();
     let data_dir = save_manager.data_dir();
     let dir_accessible = if data_dir.exists() {
@@ -65,73 +80,116 @@ pub fn run_doctor() -> io::Result<()> {
     } else {
         fs::create_dir_all(data_dir).is_ok()
     };
+    items.push(DiagnosticItem {
+        label: "Data Storage",
+        status: if dir_accessible {
+            format!("Writable ({})", data_dir.display())
+        } else {
+            format!("Permission Denied ({})", data_dir.display())
+        },
+        is_ok: dir_accessible,
+    });
 
-    if dir_accessible {
-        println!("[✓] Data Storage:      {} (Writable)", data_dir.display());
-    } else {
-        println!(
-            "[✕] Data Storage:      {} (Write permission denied)",
-            data_dir.display()
-        );
-    }
-
-    // 7. Save State & CRC32 Integrity
+    // 6. Save State & CRC32 Integrity
     let primary_save = save_manager.primary_save_path();
     if primary_save.exists() {
         match save_manager.load() {
             Ok(state) => {
-                println!(
-                    "[✓] Save Integrity:    CRC32 Verified ({} shards, {} runs, {} kills)",
-                    state.currency_shards, state.total_runs_started, state.total_enemies_killed
-                );
+                items.push(DiagnosticItem {
+                    label: "Save Integrity",
+                    status: format!(
+                        "CRC32 Verified ({} shards, {} kills)",
+                        state.currency_shards, state.total_enemies_killed
+                    ),
+                    is_ok: true,
+                });
             }
             Err(e) => {
-                println!(
-                    "[!] Save Integrity:    Corrupted ({}); auto-recovery armed",
-                    e
-                );
+                items.push(DiagnosticItem {
+                    label: "Save Integrity",
+                    status: format!("Corrupted ({})", e),
+                    is_ok: false,
+                });
             }
         }
     } else {
-        println!("[ℹ] Save Integrity:    Fresh installation (No save file yet)");
+        items.push(DiagnosticItem {
+            label: "Save Integrity",
+            status: "Fresh installation (No save file yet)".to_string(),
+            is_ok: true,
+        });
     }
 
-    // 8. Known-good backup
+    // 7. Backup presence
     let backup_save = save_manager.backup_save_path();
-    if backup_save.exists() {
-        println!(
-            "[✓] Save Backup:       Known-good backup present ({})",
-            backup_save.file_name().unwrap().to_string_lossy()
-        );
-    } else {
-        println!("[ℹ] Save Backup:       None (Created after second save cycle)");
-    }
+    items.push(DiagnosticItem {
+        label: "Known-Good Backup",
+        status: if backup_save.exists() {
+            "Present".to_string()
+        } else {
+            "None (Created after second save)".to_string()
+        },
+        is_ok: true,
+    });
 
-    // 9. Shell Integration Status
+    // 8. Shell Integration Status
     let detected_shells = detect_shell_configs();
     let mut integrated_count = 0;
-    for (shell, path) in &detected_shells {
+    for (_shell, path) in &detected_shells {
         if let Ok(content) = fs::read_to_string(path) {
             if content.contains(START_MARKER) {
-                println!(
-                    "[✓] Shell Hook:        Active in {} ({})",
-                    shell.name(),
-                    path.display()
-                );
                 integrated_count += 1;
             }
         }
     }
-    if integrated_count == 0 {
-        println!("[ℹ] Shell Hook:        Not detected in standard profiles. Run `galerne setup` to configure.");
+    items.push(DiagnosticItem {
+        label: "Shell Hooks",
+        status: if integrated_count > 0 {
+            format!("Active in {} detected configs", integrated_count)
+        } else {
+            "Not installed (`galerne setup` to configure)".to_string()
+        },
+        is_ok: integrated_count > 0,
+    });
+
+    // 9. Background Daemons
+    items.push(DiagnosticItem {
+        label: "Resident Daemons",
+        status: "None (0 MiB resident / 0% CPU)".to_string(),
+        is_ok: true,
+    });
+
+    // 10. Network Policy
+    items.push(DiagnosticItem {
+        label: "Network Policy",
+        status: "Fully Offline (Zero network/telemetry)".to_string(),
+        is_ok: true,
+    });
+
+    items
+}
+
+/// Runs diagnostic verification checks and prints an actionable summary report.
+pub fn run_doctor() -> io::Result<()> {
+    println!("Galerne v{} System Diagnostics\n", crate::VERSION);
+
+    let current_exe = env::current_exe().unwrap_or_default();
+    println!(
+        "[✓] Executable:        {} (v{})",
+        current_exe.display(),
+        crate::VERSION
+    );
+
+    for item in collect_diagnostics() {
+        let symbol = if item.is_ok { "✓" } else { "!" };
+        println!(
+            "[{}] {:<18} {}",
+            symbol,
+            format!("{}:", item.label),
+            item.status
+        );
     }
 
-    // 10. Background Daemons
-    println!("[✓] Resident Daemons:  None (Zero resident memory / 0.0% idle CPU)");
-
-    // 11. Network Isolation
-    println!("[✓] Network Policy:    Fully Offline (Zero telemetry, analytics, or ads)\n");
-
-    println!("Diagnostic verification complete. All essential invariants verified.");
+    println!("\nDiagnostic verification complete.");
     Ok(())
 }

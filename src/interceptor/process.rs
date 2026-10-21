@@ -59,8 +59,8 @@ impl Default for OutputBuffer {
 pub struct ProcessSupervisor {
     child: Child,
     pub output: OutputBuffer,
-    _stdout_handle: Option<JoinHandle<()>>,
-    _stderr_handle: Option<JoinHandle<()>>,
+    stdout_handle: Option<JoinHandle<()>>,
+    stderr_handle: Option<JoinHandle<()>>,
 }
 
 impl ProcessSupervisor {
@@ -80,6 +80,12 @@ impl ProcessSupervisor {
 
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            cmd.process_group(0);
+        }
 
         let mut child = cmd.spawn()?;
         let output = OutputBuffer::default();
@@ -111,19 +117,34 @@ impl ProcessSupervisor {
         Ok(Self {
             child,
             output,
-            _stdout_handle: stdout_handle,
-            _stderr_handle: stderr_handle,
+            stdout_handle,
+            stderr_handle,
         })
+    }
+
+    fn join_readers(&mut self) {
+        if let Some(h) = self.stdout_handle.take() {
+            let _ = h.join();
+        }
+        if let Some(h) = self.stderr_handle.take() {
+            let _ = h.join();
+        }
     }
 
     /// Non-blocking query to check if the child process has exited.
     pub fn try_wait(&mut self) -> io::Result<Option<ExitStatus>> {
-        self.child.try_wait()
+        let status = self.child.try_wait()?;
+        if status.is_some() {
+            self.join_readers();
+        }
+        Ok(status)
     }
 
-    /// Blocks until the child process terminates.
+    /// Blocks until the child process terminates and flushes buffered output.
     pub fn wait(&mut self) -> io::Result<ExitStatus> {
-        self.child.wait()
+        let status = self.child.wait()?;
+        self.join_readers();
+        Ok(status)
     }
 
     /// Forcibly kills the child process.
@@ -131,14 +152,19 @@ impl ProcessSupervisor {
         self.child.kill()
     }
 
-    /// Sends an interrupt signal (SIGINT on Unix / Ctrl+C on Windows) to the child.
+    /// Sends an interrupt signal (SIGINT on Unix / Ctrl+C on Windows) to the child process group.
     pub fn send_interrupt(&mut self) -> io::Result<()> {
         #[cfg(unix)]
         {
             let pid = self.child.id() as libc::pid_t;
-            let ret = unsafe { libc::kill(pid, libc::SIGINT) };
+            // Send SIGINT to the entire child process group (-pid)
+            let ret = unsafe { libc::kill(-pid, libc::SIGINT) };
             if ret != 0 {
-                return Err(io::Error::last_os_error());
+                // Fallback to signaling the single process
+                let ret2 = unsafe { libc::kill(pid, libc::SIGINT) };
+                if ret2 != 0 {
+                    return Err(io::Error::last_os_error());
+                }
             }
             Ok(())
         }

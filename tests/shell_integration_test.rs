@@ -60,3 +60,32 @@ fn test_shell_marker_block_clean_removal() {
     assert!(!final_content.contains("galerne shell integration"));
     assert_eq!(final_content.trim(), "alias ll='ls -la'");
 }
+
+#[test]
+fn test_shell_blocks_contain_all_advertised_tools() {
+    let tools = [
+        "cargo", "npm", "pnpm", "yarn", "docker", "make", "ninja", "cmake", "go", "pytest",
+    ];
+
+    let bash_block = ShellType::Bash.generate_block();
+    let zsh_block = ShellType::Zsh.generate_block();
+    let ps_block = ShellType::PowerShell.generate_block();
+
+    for tool in tools {
+        assert!(
+            bash_block.contains(&format!("function {}()", tool)),
+            "Bash integration missing wrapper for {}",
+            tool
+        );
+        assert!(
+            zsh_block.contains(&format!("function {}()", tool)),
+            "Zsh integration missing wrapper for {}",
+            tool
+        );
+        assert!(
+            ps_block.contains(&format!("function {} {{", tool)),
+            "PowerShell integration missing wrapper for {}",
+            tool
+        );
+    }
+}

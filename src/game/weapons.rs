@@ -1,10 +1,51 @@
 //! Weapon systems and projectile physics.
 
+use serde::{Deserialize, Serialize};
+
 use crate::game::enemies::Enemy;
 use crate::terminal::buffer::{Buffer, Color, Style};
 
+mod color_serde {
+    use super::*;
+    use serde::{Deserializer, Serializer};
+
+    pub fn serialize<S>(color: &Color, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let name = match color {
+            Color::Cyan => "cyan",
+            Color::Yellow => "yellow",
+            Color::Red => "red",
+            Color::Green => "green",
+            Color::Magenta => "magenta",
+            Color::Blue => "blue",
+            Color::White => "white",
+            _ => "reset",
+        };
+        serializer.serialize_str(name)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Color, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Ok(match s.as_str() {
+            "cyan" => Color::Cyan,
+            "yellow" => Color::Yellow,
+            "red" => Color::Red,
+            "green" => Color::Green,
+            "magenta" => Color::Magenta,
+            "blue" => Color::Blue,
+            "white" => Color::White,
+            _ => Color::Reset,
+        })
+    }
+}
+
 /// A projectile traveling across the arena.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Projectile {
     pub pos: (f32, f32),
     pub velocity: (f32, f32),
@@ -13,6 +54,7 @@ pub struct Projectile {
     pub piercing: u8,
     pub is_enemy: bool,
     pub ch: char,
+    #[serde(with = "color_serde")]
     pub color: Color,
 }
 

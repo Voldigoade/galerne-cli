@@ -25,61 +25,41 @@ impl ShellType {
     }
 
     pub fn generate_block(&self) -> String {
+        let tools = [
+            "cargo", "npm", "pnpm", "yarn", "docker", "make", "ninja", "cmake", "go", "pytest",
+        ];
+
         match self {
-            ShellType::Bash | ShellType::Zsh => format!(
-                "{}\n\
-                 # Automatically activates during developer wait times (cargo, npm, docker, make).\n\
-                 function cargo() {{\n\
-                     if command -v galerne >/dev/null 2>&1; then\n\
-                         galerne wrap cargo \"$@\"\n\
-                     else\n\
-                         command cargo \"$@\"\n\
-                     fi\n\
-                 }}\n\
-                 function npm() {{\n\
-                     if command -v galerne >/dev/null 2>&1; then\n\
-                         galerne wrap npm \"$@\"\n\
-                     else\n\
-                         command npm \"$@\"\n\
-                     fi\n\
-                 }}\n\
-                 function docker() {{\n\
-                     if command -v galerne >/dev/null 2>&1; then\n\
-                         galerne wrap docker \"$@\"\n\
-                     else\n\
-                         command docker \"$@\"\n\
-                     fi\n\
-                 }}\n\
-                 {}\n",
-                START_MARKER, END_MARKER
-            ),
-            ShellType::PowerShell => format!(
-                "{}\n\
-                 # Automatically activates during developer wait times (cargo, npm, docker, make).\n\
-                 function cargo {{\n\
-                     if (Get-Command galerne -ErrorAction SilentlyContinue) {{\n\
-                         & galerne wrap cargo @args\n\
-                     }} else {{\n\
-                         & (Get-Command -CommandType Application cargo) @args\n\
-                     }}\n\
-                 }}\n\
-                 function npm {{\n\
-                     if (Get-Command galerne -ErrorAction SilentlyContinue) {{\n\
-                         & galerne wrap npm @args\n\
-                     }} else {{\n\
-                         & (Get-Command -CommandType Application npm) @args\n\
-                     }}\n\
-                 }}\n\
-                 function docker {{\n\
-                     if (Get-Command galerne -ErrorAction SilentlyContinue) {{\n\
-                         & galerne wrap docker @args\n\
-                     }} else {{\n\
-                         & (Get-Command -CommandType Application docker) @args\n\
-                     }}\n\
-                 }}\n\
-                 {}\n",
-                START_MARKER, END_MARKER
-            ),
+            ShellType::Bash | ShellType::Zsh => {
+                let mut block = format!(
+                    "{}\n# Automatically activates during developer wait times.\n",
+                    START_MARKER
+                );
+                for tool in tools {
+                    block.push_str(&format!(
+                        "function {t}() {{\n    if command -v galerne >/dev/null 2>&1; then\n        galerne wrap {t} \"$@\"\n    else\n        command {t} \"$@\"\n    fi\n}}\n",
+                        t = tool
+                    ));
+                }
+                block.push_str(END_MARKER);
+                block.push('\n');
+                block
+            }
+            ShellType::PowerShell => {
+                let mut block = format!(
+                    "{}\n# Automatically activates during developer wait times.\n",
+                    START_MARKER
+                );
+                for tool in tools {
+                    block.push_str(&format!(
+                        "function {t} {{\n    if (Get-Command galerne -ErrorAction SilentlyContinue) {{\n        & galerne wrap {t} @args\n    }} else {{\n        & (Get-Command -CommandType Application {t}) @args\n    }}\n}}\n",
+                        t = tool
+                    ));
+                }
+                block.push_str(END_MARKER);
+                block.push('\n');
+                block
+            }
         }
     }
 }

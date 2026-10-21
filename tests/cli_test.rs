@@ -24,6 +24,30 @@ fn test_cli_argument_parsing() {
         CliAction::Saves
     );
     assert_eq!(
+        parse_cli_action(&["galerne".to_string(), "reset".to_string()]),
+        CliAction::Reset { force: false }
+    );
+    assert_eq!(
+        parse_cli_action(&["galerne".to_string(), "reset".to_string(), "-y".to_string()]),
+        CliAction::Reset { force: true }
+    );
+    assert_eq!(
+        parse_cli_action(&[
+            "galerne".to_string(),
+            "reset".to_string(),
+            "--yes".to_string()
+        ]),
+        CliAction::Reset { force: true }
+    );
+    assert_eq!(
+        parse_cli_action(&[
+            "galerne".to_string(),
+            "restore".to_string(),
+            "archive_12345.dat".to_string()
+        ]),
+        CliAction::Restore("archive_12345.dat".to_string())
+    );
+    assert_eq!(
         parse_cli_action(&["galerne".to_string(), "setup".to_string()]),
         CliAction::Setup
     );

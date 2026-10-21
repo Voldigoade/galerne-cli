@@ -3,6 +3,7 @@
 pub mod history;
 pub mod matcher;
 pub mod process;
+pub mod signal;
 pub mod supervisor;
 pub mod transition;
 

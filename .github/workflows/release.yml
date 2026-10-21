@@ -30,7 +30,15 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Build Optimized Release Binary
-        run: cargo build --release --target ${{ matrix.target }}
+        shell: bash
+        run: |
+          cargo build --release --target ${{ matrix.target }} --bin galerne
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            export EMBED_GALERNE_BIN="target/${{ matrix.target }}/release/galerne.exe"
+            cargo build --release --target ${{ matrix.target }} --bin galerne-setup
+            cp target/${{ matrix.target }}/release/galerne-setup.exe Galerne-Setup-x86_64.exe
+            sha256sum Galerne-Setup-x86_64.exe > Galerne-Setup-x86_64.exe.sha256
+          fi
 
       - name: Package Linux Archive
         if: matrix.os == 'ubuntu-latest'
@@ -59,6 +67,7 @@ jobs:
           path: |
             ${{ matrix.artifact_name }}
             ${{ matrix.artifact_name }}.sha256
+            Galerne-Setup-x86_64.exe*
 
   publish-github-release:
     name: Publish GitHub Release

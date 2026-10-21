@@ -80,3 +80,33 @@ fn test_non_blocking_try_wait() {
     assert!(poll2.is_some(), "Process should have exited");
     assert!(poll2.unwrap().success());
 }
+
+#[test]
+fn test_disabled_auto_activate_bypasses_gameplay_completely() {
+    let temp_dir = std::env::temp_dir().join("galerne_test_disable_auto");
+    let _ = std::fs::create_dir_all(&temp_dir);
+    std::env::set_var("GALERNE_DATA_DIR", &temp_dir);
+
+    let save_manager = galerne::storage::manager::SaveManager::with_dir(&temp_dir);
+    let mut state = galerne::storage::schema::SaveState::default();
+    state.settings.auto_activate = false;
+    save_manager.save(&state).expect("saved disabled state");
+
+    let start = std::time::Instant::now();
+    let exit_code = galerne::interceptor::execute_wrapped_task(&[
+        "sh".to_string(),
+        "-c".to_string(),
+        "exit 42".to_string(),
+    ])
+    .expect("wrapped task");
+
+    let elapsed = start.elapsed();
+    assert_eq!(exit_code, 42, "Direct command exit code must be preserved");
+    assert!(
+        elapsed < Duration::from_millis(1000),
+        "Must not wait through anti-flicker delay or open game view when disabled (took {:?})",
+        elapsed
+    );
+
+    let _ = std::fs::remove_dir_all(&temp_dir);
+}

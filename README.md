@@ -25,16 +25,18 @@ When you trigger long development operations (`cargo build`, `cargo test`, `npm 
 
 ## Measured Performance & Budgets
 
-All metrics are measured empirically from release binaries on standard developer hardware (Linux x86_64 and Windows x86_64):
+All metrics are measured empirically from release binaries on standard Linux x86_64 developer hardware (Windows x86_64 CI validations run on each commit; native Windows benchmarks will be documented separately upon empirical host profiling):
 
-| Metric | Measured Value | Constraint Budget |
+| Metric | Measured Value (Linux) | Constraint Budget |
 | :--- | :--- | :--- |
 | **Stripped Binary Size** | **798 KiB** | < 5.0 MiB |
 | **Startup Latency** | **< 2.0 ms** | < 15.0 ms |
 | **Resident Memory (RSS)** | **3.06 MiB** | < 20.0 MiB |
 | **Idle CPU Utilization** | **0.0%** (no daemon) | 0.0% |
 | **Typical Save Size** | **434 bytes** | < 5.0 KiB |
-| **Diff Renderer Latency** | **4.40 µs / frame** (227k fps throughput) | Real-time |
+| **Diff Renderer Latency** | **4.46 µs / frame** (224k fps throughput) | Real-time |
+| **In-Memory Save Serialization** | **0.04 µs / op** (25.3M ops/sec) | Microbenchmark |
+| **Full Atomic Disk Save I/O** | **29.11 µs / save** (34.3k saves/sec) | < 5.0 ms |
 | **Wrapping Latency Overhead** | **10.59 ms** | < 25.0 ms |
 
 - **Zero Resident Daemon**: Galerne runs only when you play or execute tasks. No background processes or battery drain.
@@ -52,14 +54,16 @@ cargo build
     ▼
 [ Galerne Game View ]
     │
-    ├─► Press Ctrl+C (First interrupt)
+    ├─► Press Ctrl+C or Esc / q (First interrupt)
     │     ├── Game view closes instantly
-    │     ├── Progression is persisted
-    │     ├── Terminal is cleanly restored
-    │     └── cargo build CONTINUES RUNNING in log view
+    │     ├── Exact run state and progression are persisted
+    │     ├── Terminal cooked mode is cleanly restored
+    │     └── cargo build CONTINUES RUNNING in live log view
     │
     ▼
 [ Task Log View ]
+    │
+    ├─► Arriving output streams live to stdout
     │
     └─► Press Ctrl+C (Second interrupt)
           └── Cancels the cargo build natively (SIGINT)
@@ -69,16 +73,20 @@ cargo build
 
 ## Installation
 
+### Windows (Recommended Native Installer)
+
+Download and run **`Galerne-Setup-x86_64.exe`** from the [GitHub Releases](https://github.com/Voldigoade/galerne/releases/latest) page. The installer automatically configures your user PATH and sets up PowerShell integration.
+
+Alternatively, install via PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/Voldigoade/galerne/main/scripts/install.ps1 | iex
+```
+
 ### Linux & macOS (One-Line Terminal Install)
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/Voldigoade/galerne/main/scripts/install.sh | sh
-```
-
-### Windows (PowerShell)
-
-```powershell
-irm https://raw.githubusercontent.com/Voldigoade/galerne/main/scripts/install.ps1 | iex
 ```
 
 ### Building From Source
@@ -108,11 +116,12 @@ galerne
 ### Direct CLI Commands
 
 ```bash
-galerne play               # Direct manual game deployment
+galerne play               # Direct manual game deployment (bypasses dashboard)
 galerne stats              # Display career metrics and wait time saved
-galerne doctor             # Run read-only installation health diagnostics
+galerne doctor             # Run live read-only installation health diagnostics
 galerne saves              # Inspect save files and archived snapshots
-galerne reset              # Archive current progress and initialize clean state
+galerne reset [-y|--yes]   # Archive current progress and initialize clean state
+galerne restore <archive>  # Restore a previous archived save snapshot
 galerne setup              # Configure shell hooks (Bash, Zsh, PowerShell)
 galerne enable             # Enable automatic wait-time activation
 galerne disable            # Disable automatic activation (preserves saves)

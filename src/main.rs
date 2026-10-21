@@ -1,4 +1,5 @@
 use std::env;
+use std::io::{self, Write};
 use std::process;
 
 use galerne::interceptor::execute_wrapped_task;
@@ -6,7 +7,7 @@ use galerne::shell::{run_doctor, setup_all_shells, uninstall_all_shells};
 use galerne::storage::manager::SaveManager;
 use galerne::storage::stats::format_career_stats;
 use galerne::ui::cli::{parse_cli_action, print_help, CliAction};
-use galerne::ui::dashboard::run_dashboard;
+use galerne::ui::dashboard::{run_dashboard, run_direct_play};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -22,8 +23,8 @@ fn main() {
             }
         }
         CliAction::Play => {
-            if let Err(e) = run_dashboard() {
-                eprintln!("Error launching Galerne: {}", e);
+            if let Err(e) = run_direct_play() {
+                eprintln!("Error launching Galerne combat session: {}", e);
                 process::exit(1);
             }
         }
@@ -50,13 +51,26 @@ fn main() {
                     for (name, size) in archives {
                         println!("  - {:<28} ({} bytes)", name, size);
                     }
+                    println!("\nTo restore an archive: galerne restore <archive_name>");
                 }
                 _ => {
                     println!("\nNo historical archives found.");
                 }
             }
         }
-        CliAction::Reset => {
+        CliAction::Reset { force } => {
+            if !force {
+                print!("Are you sure you want to archive and reset career progression? [y/N]: ");
+                let _ = io::stdout().flush();
+                let mut input = String::new();
+                if io::stdin().read_line(&mut input).is_err()
+                    || !matches!(input.trim().to_lowercase().as_str(), "y" | "yes")
+                {
+                    println!("Reset cancelled. Progression unchanged.");
+                    return;
+                }
+            }
+
             println!("Archiving existing progression before reset...");
             match save_manager.archive_and_reset() {
                 Ok(archive_path) => {
@@ -68,6 +82,27 @@ fn main() {
                 }
                 Err(e) => {
                     eprintln!("Failed to archive and reset: {}", e);
+                    process::exit(1);
+                }
+            }
+        }
+        CliAction::Restore(archive_name) => {
+            let clean_name = if let Some(filename) = std::path::Path::new(&archive_name).file_name()
+            {
+                filename.to_string_lossy().to_string()
+            } else {
+                archive_name.clone()
+            };
+
+            match save_manager.restore_archive(&clean_name) {
+                Ok(_) => {
+                    println!(
+                        "✓ Successfully restored career progression from: {}",
+                        clean_name
+                    );
+                }
+                Err(e) => {
+                    eprintln!("Failed to restore archive '{}': {}", clean_name, e);
                     process::exit(1);
                 }
             }

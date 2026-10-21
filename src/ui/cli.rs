@@ -8,7 +8,8 @@ pub enum CliAction {
     Stats,
     Doctor,
     Saves,
-    Reset,
+    Reset { force: bool },
+    Restore(String),
     Setup,
     Enable,
     Disable,
@@ -30,7 +31,20 @@ pub fn parse_cli_action(args: &[String]) -> CliAction {
         "stats" => CliAction::Stats,
         "doctor" => CliAction::Doctor,
         "saves" => CliAction::Saves,
-        "reset" => CliAction::Reset,
+        "reset" => {
+            let force = args
+                .iter()
+                .skip(2)
+                .any(|a| a == "-y" || a == "--yes" || a == "-f" || a == "--force");
+            CliAction::Reset { force }
+        }
+        "restore" => {
+            if args.len() > 2 {
+                CliAction::Restore(args[2].clone())
+            } else {
+                CliAction::Help
+            }
+        }
         "setup" => CliAction::Setup,
         "enable" => CliAction::Enable,
         "disable" => CliAction::Disable,
@@ -65,7 +79,8 @@ pub fn print_help() {
           galerne stats               Display career progression and wait time saved\n  \
           galerne doctor              Run read-only system diagnostics\n  \
           galerne saves               Inspect active saves and archived backups\n  \
-          galerne reset               Archive current progress and initialize fresh state\n  \
+          galerne reset [-y|--yes]    Archive current progress and initialize fresh state\n  \
+          galerne restore <archive>   Restore a previous archived save snapshot\n  \
           galerne setup               Configure shell integration (Bash, Zsh, PowerShell)\n  \
           galerne enable              Enable automatic wait-time game activation\n  \
           galerne disable             Disable automatic game activation\n  \

@@ -1,5 +1,7 @@
 //! Complete game state container and simulation coordinator.
 
+use serde::{Deserialize, Serialize};
+
 use crate::game::arena::Arena;
 use crate::game::enemies::{Enemy, EnemyKind};
 use crate::game::player::Player;
@@ -8,7 +10,7 @@ use crate::game::weapons::{Projectile, Weapon};
 use crate::terminal::buffer::{Buffer, Color, Style};
 
 /// Lightweight deterministic xorshift64 pseudorandom generator.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FastRng {
     state: u64,
 }
@@ -18,6 +20,20 @@ impl FastRng {
         Self {
             state: if seed == 0 { 0x8a5cd789635d2dff } else { seed },
         }
+    }
+
+    pub fn from_state(state: u64) -> Self {
+        Self {
+            state: if state == 0 {
+                0x8a5cd789635d2dff
+            } else {
+                state
+            },
+        }
+    }
+
+    pub fn state(&self) -> u64 {
+        self.state
     }
 
     pub fn next_u64(&mut self) -> u64 {
@@ -56,7 +72,7 @@ pub struct GameInput {
 }
 
 /// An experience gem or persistent currency dropped by defeated enemies.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct XpGem {
     pub x: f32,
     pub y: f32,
@@ -126,6 +142,74 @@ impl GameState {
 
     pub fn is_game_over(&self) -> bool {
         self.is_game_over
+    }
+
+    /// Captures the complete deterministic simulation state for exact continuation.
+    pub fn create_snapshot(&self) -> crate::storage::schema::ActiveRunSnapshot {
+        crate::storage::schema::ActiveRunSnapshot {
+            player_hp: self.player.hp,
+            player_max_hp: self.player.max_hp,
+            player_x: self.player.x,
+            player_y: self.player.y,
+            player_speed: self.player.speed,
+            player_magnet_radius: self.player.magnet_radius,
+            player_level: self.player.level,
+            player_xp: self.player.xp,
+            player_next_level_xp: self.player.next_level_xp,
+            shards_collected: self.player.shards,
+            weapon_damage: self.weapon.damage,
+            weapon_cooldown: self.weapon.cooldown,
+            weapon_cooldown_remaining: self.weapon.cooldown_remaining,
+            weapon_multishot: self.weapon.multishot,
+            weapon_piercing: self.weapon.piercing,
+            weapon_speed: self.weapon.speed,
+            weapon_range: self.weapon.range,
+            wave: self.wave,
+            wave_timer: self.wave_timer,
+            spawn_timer: self.spawn_timer,
+            run_duration: self.run_duration,
+            enemies_killed: self.enemies_killed,
+            boss_spawned: self.boss_spawned,
+            rng_state: self.rng.state(),
+            enemies: self.enemies.clone(),
+            projectiles: self.projectiles.clone(),
+            gems: self.gems.clone(),
+            pending_level_up: self.pending_level_up,
+            current_draft: self.current_draft.clone(),
+        }
+    }
+
+    /// Resumes the simulation faithfully from an exact active run snapshot.
+    pub fn resume_snapshot(&mut self, snap: &crate::storage::schema::ActiveRunSnapshot) {
+        self.player.hp = snap.player_hp;
+        self.player.max_hp = snap.player_max_hp;
+        self.player.x = snap.player_x;
+        self.player.y = snap.player_y;
+        self.player.speed = snap.player_speed;
+        self.player.magnet_radius = snap.player_magnet_radius;
+        self.player.level = snap.player_level;
+        self.player.xp = snap.player_xp;
+        self.player.next_level_xp = snap.player_next_level_xp;
+        self.player.shards = snap.shards_collected;
+        self.weapon.damage = snap.weapon_damage;
+        self.weapon.cooldown = snap.weapon_cooldown;
+        self.weapon.cooldown_remaining = snap.weapon_cooldown_remaining;
+        self.weapon.multishot = snap.weapon_multishot;
+        self.weapon.piercing = snap.weapon_piercing;
+        self.weapon.speed = snap.weapon_speed;
+        self.weapon.range = snap.weapon_range;
+        self.wave = snap.wave;
+        self.wave_timer = snap.wave_timer;
+        self.spawn_timer = snap.spawn_timer;
+        self.run_duration = snap.run_duration;
+        self.enemies_killed = snap.enemies_killed;
+        self.boss_spawned = snap.boss_spawned;
+        self.rng = FastRng::from_state(snap.rng_state);
+        self.enemies = snap.enemies.clone();
+        self.projectiles = snap.projectiles.clone();
+        self.gems = snap.gems.clone();
+        self.pending_level_up = snap.pending_level_up;
+        self.current_draft = snap.current_draft.clone();
     }
 
     /// Applies a selected in-run upgrade to player or weapon stats.
