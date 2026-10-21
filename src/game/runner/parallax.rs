@@ -59,6 +59,13 @@ const ARRAY_TOWER_COMPACT: &[&str] = &[
     r"   ____||____",
 ];
 
+const RETURNING_TRAM: &[&str] = &[
+    r"      .--------.",
+    r"  ____| []  [] |____",
+    r"_/____|________|____\_",
+    r"      o        o",
+];
+
 const SETTLEMENT_LEFT: &[&str] = &[
     r"       .                    ______",
     r"    __/ \_____       ______|  []  |___",
@@ -212,6 +219,15 @@ impl ParallaxEngine {
             Color::DarkGrey,
             relay_restored,
         );
+        if relay_restored {
+            let tram_x = 18 + (self.far_offset * 0.4) as i32 % 88;
+            draw_returning_tram(
+                buf,
+                self.far_offset,
+                tram_x,
+                far_end.saturating_sub(6) as i32,
+            );
+        }
 
         let settlement = if mid_end.saturating_sub(mid_start) >= SETTLEMENT_LEFT.len() {
             SETTLEMENT_LEFT
@@ -342,7 +358,10 @@ fn draw_scene_art(
             }
             for (column, glyph) in line.chars().enumerate() {
                 let x = start_x + column as i32;
-                if glyph == ' ' || !(0..width).contains(&x) {
+                if !(0..width).contains(&x) {
+                    continue;
+                }
+                if glyph == ' ' {
                     continue;
                 }
                 let color = match glyph {
@@ -350,6 +369,36 @@ fn draw_scene_art(
                     '[' | ']' if base_color == Color::DarkGrey => Color::Yellow,
                     '=' | '+' | '|' if relay_restored => Color::DarkCyan,
                     _ => base_color,
+                };
+                buf.set_char(x as u16, y as u16, glyph, color, Color::Black);
+            }
+        }
+    }
+}
+
+fn draw_returning_tram(buf: &mut Buffer, offset: f32, art_x: i32, art_y: i32) {
+    let phase = offset.rem_euclid(SCENE_WIDTH as f32) as i32;
+
+    for cycle in [-SCENE_WIDTH, 0, SCENE_WIDTH] {
+        let start_x = art_x + cycle - phase;
+        for (row, line) in RETURNING_TRAM.iter().enumerate() {
+            let y = art_y + row as i32;
+            if !(0..buf.height() as i32).contains(&y) {
+                continue;
+            }
+            for (column, glyph) in line.chars().enumerate() {
+                let x = start_x + column as i32;
+                if !(0..buf.width() as i32).contains(&x) {
+                    continue;
+                }
+                if glyph == ' ' {
+                    buf.set_char(x as u16, y as u16, ' ', Color::Reset, Color::Black);
+                    continue;
+                }
+                let color = match glyph {
+                    '[' | ']' => Color::Yellow,
+                    '=' | '|' => Color::DarkCyan,
+                    _ => Color::DarkGrey,
                 };
                 buf.set_char(x as u16, y as u16, glyph, color, Color::Black);
             }

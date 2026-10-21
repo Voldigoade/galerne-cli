@@ -1,4 +1,5 @@
 use galerne::game::runner::action::{ActionState, PlayerInput};
+use galerne::game::runner::parallax::ParallaxEngine;
 use galerne::game::runner::state::RunnerState;
 use galerne::game::runner::wind::TailwindTier;
 use galerne::storage::schema::SaveState;
@@ -16,6 +17,32 @@ fn buffer_to_string(buf: &Buffer) -> String {
         out.push('\n');
     }
     out
+}
+
+#[test]
+fn restored_line_resumes_the_suspended_tram() {
+    let mut dormant = Buffer::new(236, 53);
+    ParallaxEngine::default().render_backdrop(&mut dormant, 48, false);
+    assert!(!buffer_to_string(&dormant).contains('o'));
+
+    let mut active = ParallaxEngine::default();
+    let mut running = Buffer::new(236, 53);
+    active.render_backdrop(&mut running, 48, true);
+    let wheels_at_restored_start: Vec<_> = (0..running.height())
+        .flat_map(|y| (0..running.width()).map(move |x| (x, y)))
+        .filter(|(x, y)| running.get(*x, *y).is_some_and(|cell| cell.ch == 'o'))
+        .collect();
+    assert_eq!(wheels_at_restored_start.len(), 2);
+
+    active.update(60.0);
+    let mut moving = Buffer::new(236, 53);
+    active.render_backdrop(&mut moving, 48, true);
+    let wheels_in_motion: Vec<_> = (0..moving.height())
+        .flat_map(|y| (0..moving.width()).map(move |x| (x, y)))
+        .filter(|(x, y)| moving.get(*x, *y).is_some_and(|cell| cell.ch == 'o'))
+        .collect();
+    assert_eq!(wheels_in_motion.len(), 2);
+    assert_ne!(wheels_at_restored_start, wheels_in_motion);
 }
 
 #[test]
