@@ -6,18 +6,27 @@ use galerne::interceptor::signal;
 
 #[test]
 fn test_child_continues_running_and_streams_output() {
-    let mut supervisor = ProcessSupervisor::spawn(&[
-        "sh".to_string(),
-        "-c".to_string(),
-        "echo 'Line 1'; sleep 0.15; echo 'Line 2'; sleep 0.15; echo 'Line 3'".to_string(),
-    ])
-    .expect("spawned supervisor");
+    let args = if cfg!(windows) {
+        vec![
+            "cmd".to_string(),
+            "/c".to_string(),
+            "echo Line 1 & ping 127.0.0.1 -n 2 >nul & echo Line 2 & ping 127.0.0.1 -n 2 >nul & echo Line 3".to_string(),
+        ]
+    } else {
+        vec![
+            "sh".to_string(),
+            "-c".to_string(),
+            "echo 'Line 1'; sleep 0.15; echo 'Line 2'; sleep 0.15; echo 'Line 3'".to_string(),
+        ]
+    };
+
+    let mut supervisor = ProcessSupervisor::spawn(&args).expect("spawned supervisor");
 
     // Wait slightly to let line 1 arrive
     thread::sleep(Duration::from_millis(50));
     let initial_lines = supervisor.output.drain_lines();
     assert!(
-        initial_lines.contains(&"Line 1".to_string()),
+        initial_lines.iter().any(|l| l.contains("Line 1")),
         "Line 1 should arrive while process is running"
     );
 
@@ -30,21 +39,30 @@ fn test_child_continues_running_and_streams_output() {
     assert!(status.success());
 
     let final_lines = supervisor.output.drain_lines();
-    assert!(final_lines.contains(&"Line 2".to_string()));
-    assert!(final_lines.contains(&"Line 3".to_string()));
+    assert!(final_lines.iter().any(|l| l.contains("Line 2")));
+    assert!(final_lines.iter().any(|l| l.contains("Line 3")));
 }
 
 #[test]
 fn test_child_interruption_via_signal() {
-    let mut supervisor = ProcessSupervisor::spawn(&[
-        "sh".to_string(),
-        "-c".to_string(),
-        "echo 'Started'; sleep 10; echo 'Should not reach here'".to_string(),
-    ])
-    .expect("spawned supervisor");
+    let args = if cfg!(windows) {
+        vec![
+            "cmd".to_string(),
+            "/c".to_string(),
+            "echo Started & ping 127.0.0.1 -n 15 >nul & echo Should not reach here".to_string(),
+        ]
+    } else {
+        vec![
+            "sh".to_string(),
+            "-c".to_string(),
+            "echo 'Started'; sleep 10; echo 'Should not reach here'".to_string(),
+        ]
+    };
+
+    let mut supervisor = ProcessSupervisor::spawn(&args).expect("spawned supervisor");
 
     // Verify it is alive
-    thread::sleep(Duration::from_millis(50));
+    thread::sleep(Duration::from_millis(100));
     assert!(supervisor.try_wait().expect("poll").is_none());
 
     // Send interrupt signal (second Ctrl+C in task view)
@@ -57,8 +75,8 @@ fn test_child_interruption_via_signal() {
     );
 
     let logs = supervisor.output.drain_lines();
-    assert!(logs.contains(&"Started".to_string()));
-    assert!(!logs.contains(&"Should not reach here".to_string()));
+    assert!(logs.iter().any(|l| l.contains("Started")));
+    assert!(!logs.iter().any(|l| l.contains("Should not reach here")));
 }
 
 #[test]

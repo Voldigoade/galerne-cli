@@ -168,9 +168,21 @@ impl ProcessSupervisor {
             }
             Ok(())
         }
-        #[cfg(not(unix))]
+        #[cfg(windows)]
         {
-            // Windows fallback
+            let pid = self.child.id();
+            // On Windows, taskkill /PID <pid> /T /F terminates the entire process tree
+            let status = Command::new("taskkill")
+                .args(["/PID", &pid.to_string(), "/T", "/F"])
+                .status();
+            if status.is_err() || !status.unwrap().success() {
+                // Fallback to basic process kill if taskkill fails
+                let _ = self.child.kill();
+            }
+            Ok(())
+        }
+        #[cfg(all(not(unix), not(windows)))]
+        {
             self.child.kill()
         }
     }
