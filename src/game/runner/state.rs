@@ -9,7 +9,7 @@ use super::items::{FloatingIndicator, ItemKind};
 use super::player::{RunnerPlayer, PLAYER_SPRITE_LEFT_OFFSET};
 use super::region::{sector_for_distance, SectorKind};
 use super::wind::{TailwindTier, WindKind};
-use super::world::{Chunk, ChunkWorld, LandmarkKind, CHUNK_WIDTH};
+use super::world::{Chunk, ChunkWorld, LandmarkKind, CHECKPOINTS, CHUNK_WIDTH};
 use crate::terminal::buffer::{Buffer, Color, Style};
 use crate::ui::i18n::{t, Locale};
 
@@ -250,6 +250,27 @@ impl RunnerState {
         nearest.map(|(_, prompt)| prompt)
     }
 
+    fn next_checkpoint(&self) -> Option<(&str, u32)> {
+        let player_x = self.world.scroll_x + self.player.x;
+        let mut nearest: Option<(f32, &str)> = None;
+
+        for &(id, world_x, name_key) in &CHECKPOINTS {
+            if self.unlocked_checkpoints.contains(&id) {
+                continue;
+            }
+
+            let distance = world_x as f32 - player_x;
+            if distance < 0.0 {
+                continue;
+            }
+            if nearest.is_none_or(|(best_distance, _)| distance < best_distance) {
+                nearest = Some((distance, name_key));
+            }
+        }
+
+        nearest.map(|(distance, name)| (name, distance.ceil() as u32))
+    }
+
     pub fn update(&mut self, dt: f32, input: Option<PlayerInput>) {
         if self.is_game_over {
             return;
@@ -392,21 +413,14 @@ impl RunnerState {
                                 self.last_checkpoint_id = *id;
                                 self.last_checkpoint_distance = self.distance;
                                 self.player.invulnerable_timer = 1.5;
-                                let translated_name = match name_key.as_str() {
-                                    "cp_departure" => t("cp_departure", self.locale),
-                                    "cp_shanty_outpost" => t("cp_shanty_outpost", self.locale),
-                                    "cp_shaft_airlock" => t("cp_shaft_airlock", self.locale),
-                                    "cp_high_roost" => t("cp_high_roost", self.locale),
-                                    "cp_relay_node" => t("cp_relay_node", self.locale),
-                                    _ => name_key.as_str(),
-                                };
+                                let translated_name = checkpoint_name(name_key, self.locale);
                                 self.floating_indicators.push(FloatingIndicator::new(
                                     self.player.x + 1.0,
                                     self.player.y - 4.5,
                                     crate::ui::i18n::format_message(
                                         "checkpoint_message",
                                         self.locale,
-                                        &[("name", translated_name.to_owned())],
+                                        &[("name", translated_name)],
                                     ),
                                 ));
                             }
@@ -906,6 +920,26 @@ impl RunnerState {
             Style::new(Color::White, Color::Black).bold(),
         );
 
+        if let Some((name_key, distance)) = self.next_checkpoint() {
+            let waypoint = format!(
+                "{}   ",
+                crate::ui::i18n::format_message(
+                    "next_checkpoint",
+                    locale,
+                    &[
+                        ("name", checkpoint_name(name_key, locale)),
+                        ("distance", distance.to_string()),
+                    ],
+                )
+            );
+            buf.draw_str_styled(
+                1,
+                1,
+                &waypoint,
+                Style::new(Color::DarkCyan, Color::Black).bold(),
+            );
+        }
+
         if let Some(prompt_key) = self.current_prompt() {
             let prompt_text = t(prompt_key, locale);
             let prompt_x = (width.saturating_sub(prompt_text.width())) / 2;
@@ -925,4 +959,16 @@ fn cache_contents_locked(chunk: &Chunk, cache_found: bool) -> bool {
             .landmarks
             .iter()
             .any(|landmark| matches!(&landmark.kind, LandmarkKind::SecretCache { opened: false }))
+}
+
+fn checkpoint_name(name_key: &str, locale: Locale) -> String {
+    let key = match name_key {
+        "cp_departure" => "cp_departure",
+        "cp_shanty_outpost" => "cp_shanty_outpost",
+        "cp_shaft_airlock" => "cp_shaft_airlock",
+        "cp_high_roost" => "cp_high_roost",
+        "cp_relay_node" => "cp_relay_node",
+        _ => return name_key.to_owned(),
+    };
+    t(key, locale).to_owned()
 }

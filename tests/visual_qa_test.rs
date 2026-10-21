@@ -3,11 +3,13 @@ use galerne::game::runner::items::{ItemKind, PickupItem};
 use galerne::game::runner::parallax::ParallaxEngine;
 use galerne::game::runner::state::RunnerState;
 use galerne::game::runner::wind::TailwindTier;
-use galerne::game::runner::world::{Chunk, Landmark, LandmarkKind};
+use galerne::game::runner::world::{
+    Chunk, ChunkWorld, Landmark, LandmarkKind, CHECKPOINTS, CHUNK_WIDTH,
+};
 use galerne::storage::schema::SaveState;
 use galerne::terminal::buffer::Buffer;
 use galerne::ui::dashboard::render_refuge_panel;
-use galerne::ui::i18n::{t, Locale, ALL_LOCALES};
+use galerne::ui::i18n::{format_message, t, Locale, ALL_LOCALES};
 
 fn buffer_to_string(buf: &Buffer) -> String {
     let mut out = String::new();
@@ -148,6 +150,88 @@ fn player_sprite_negative_space_preserves_the_scene_behind_it() {
     game.render(&mut buf, Locale::En);
 
     assert_eq!(buf.get(8, 13).unwrap().ch, '+');
+}
+
+#[test]
+fn next_checkpoint_is_shown_in_each_supported_locale() {
+    let game = RunnerState::new(80, 24, 0x12345678);
+    let player_x = game.world.scroll_x + game.player.x;
+    let (_, checkpoint_x, checkpoint_name) = CHECKPOINTS
+        .iter()
+        .find(|(id, _, _)| !game.unlocked_checkpoints.contains(id))
+        .unwrap();
+    let distance = (*checkpoint_x as f32 - player_x).ceil() as u32;
+
+    for &locale in ALL_LOCALES {
+        let expected = format_message(
+            "next_checkpoint",
+            locale,
+            &[
+                ("name", t(checkpoint_name, locale).to_owned()),
+                ("distance", distance.to_string()),
+            ],
+        );
+        let mut buf = Buffer::new(80, 24);
+        game.render(&mut buf, locale);
+        let rendered = buffer_to_string(&buf);
+        assert!(
+            rendered.contains(&expected),
+            "next checkpoint should use locale {locale:?}"
+        );
+    }
+}
+
+#[test]
+fn fresh_minimum_sized_game_shows_the_first_destination() {
+    let game = RunnerState::new(80, 24, 0x12345678);
+    let mut buf = Buffer::new(80, 24);
+    game.render(&mut buf, Locale::En);
+
+    let rendered = buffer_to_string(&buf);
+    println!("--- VISUAL QA: FIRST WAYPOINT (80x24) ---\n{}", rendered);
+    assert!(rendered.contains("NEXT STOP: Span homes"));
+}
+
+#[test]
+fn next_checkpoint_advances_when_the_current_one_is_reached() {
+    let mut game = RunnerState::new(80, 24, 0x12345678);
+    game.unlocked_checkpoints.push(1);
+
+    let mut buf = Buffer::new(80, 24);
+    game.render(&mut buf, Locale::En);
+
+    assert!(buffer_to_string(&buf).contains("NEXT STOP: Lift shaft door"));
+}
+
+#[test]
+fn checkpoint_landmarks_match_the_waypoint_positions() {
+    let mut world = ChunkWorld::new(0x12345678, 80, 24);
+    world.ensure_chunks_generated(CHECKPOINTS.last().unwrap().1 as f32);
+
+    for &(id, world_x, name_key) in &CHECKPOINTS {
+        let chunk_index = world_x / CHUNK_WIDTH;
+        let chunk = world
+            .chunks
+            .iter()
+            .find(|chunk| chunk.index == chunk_index)
+            .unwrap();
+        let local_x = chunk
+            .landmarks
+            .iter()
+            .find_map(|landmark| match &landmark.kind {
+                LandmarkKind::CheckpointPylon {
+                    id: landmark_id,
+                    name_key: landmark_name,
+                } if *landmark_id == id && landmark_name == name_key => Some(landmark.rel_x),
+                _ => None,
+            })
+            .unwrap();
+
+        assert_eq!(
+            chunk_index as f32 * CHUNK_WIDTH as f32 + local_x,
+            world_x as f32
+        );
+    }
 }
 
 #[test]

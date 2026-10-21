@@ -8,6 +8,13 @@ use super::parallax::ParallaxEngine;
 use super::wind::{WindCurrent, WindKind};
 
 pub const CHUNK_WIDTH: usize = 50;
+pub const CHECKPOINTS: [(u32, usize, &str); 5] = [
+    (0, 4, "cp_departure"),
+    (1, 260, "cp_shanty_outpost"),
+    (2, 512, "cp_shaft_airlock"),
+    (3, 885, "cp_high_roost"),
+    (4, 1210, "cp_relay_node"),
+];
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum LandmarkKind {
@@ -146,14 +153,6 @@ impl ChunkWorld {
 
         match index {
             0 => {
-                landmarks.push(Landmark::new(
-                    4.0,
-                    ground_y,
-                    LandmarkKind::CheckpointPylon {
-                        id: 0,
-                        name_key: "cp_departure".to_string(),
-                    },
-                ));
                 items.push(PickupItem::new(25.0, ground_y - 1.0, ItemKind::GaleShard));
                 items.push(PickupItem::new(38.0, ground_y - 1.0, ItemKind::GaleShard));
             }
@@ -183,14 +182,6 @@ impl ChunkWorld {
                 obstacles.push(Obstacle::new(38.0, ground_y, ObstacleKind::LowBarrier));
             }
             5 => {
-                landmarks.push(Landmark::new(
-                    10.0,
-                    ground_y,
-                    LandmarkKind::CheckpointPylon {
-                        id: 1,
-                        name_key: "cp_shanty_outpost".to_string(),
-                    },
-                ));
                 wind_currents.push(WindCurrent::new(
                     25.0,
                     ground_y,
@@ -237,14 +228,6 @@ impl ChunkWorld {
                 ));
             }
             10 => {
-                landmarks.push(Landmark::new(
-                    12.0,
-                    ground_y,
-                    LandmarkKind::CheckpointPylon {
-                        id: 2,
-                        name_key: "cp_shaft_airlock".to_string(),
-                    },
-                ));
                 items.push(PickupItem::new(30.0, ground_y - 1.0, ItemKind::GaleShard));
             }
             11 => {
@@ -294,14 +277,6 @@ impl ChunkWorld {
                 items.push(PickupItem::new(15.0, ground_y - 1.0, ItemKind::GaleShard));
             }
             17 => {
-                landmarks.push(Landmark::new(
-                    35.0,
-                    ground_y,
-                    LandmarkKind::CheckpointPylon {
-                        id: 3,
-                        name_key: "cp_high_roost".to_string(),
-                    },
-                ));
                 items.push(PickupItem::new(20.0, ground_y - 1.0, ItemKind::GaleShard));
             }
             18 => {
@@ -353,14 +328,6 @@ impl ChunkWorld {
                     ground_y,
                     LandmarkKind::RelayNodeConsole { restored: false },
                 ));
-                landmarks.push(Landmark::new(
-                    10.0,
-                    ground_y,
-                    LandmarkKind::CheckpointPylon {
-                        id: 4,
-                        name_key: "cp_relay_node".to_string(),
-                    },
-                ));
             }
             _ => {
                 let mut rng = ChunkRng::new(self.seed, index as u64);
@@ -376,6 +343,19 @@ impl ChunkWorld {
                 if rng.next_f32() < 0.35 {
                     obstacles.push(Obstacle::new(35.0, ground_y, ObstacleKind::LowBarrier));
                 }
+            }
+        }
+
+        for &(id, world_x, name_key) in &CHECKPOINTS {
+            if world_x / CHUNK_WIDTH == index {
+                landmarks.push(Landmark::new(
+                    (world_x % CHUNK_WIDTH) as f32,
+                    ground_y,
+                    LandmarkKind::CheckpointPylon {
+                        id,
+                        name_key: name_key.to_owned(),
+                    },
+                ));
             }
         }
 
