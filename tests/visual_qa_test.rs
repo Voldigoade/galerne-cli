@@ -234,6 +234,43 @@ fn roomy_terminal_traveler_keeps_art_scale_across_actions() {
 }
 
 #[test]
+fn bridge_underside_uses_spaced_authored_supports() {
+    for (width, height) in [(80, 24), (236, 53)] {
+        let panorama = ParallaxEngine::default();
+        let mut frame = Buffer::new(width, height);
+        let ground_y = height as usize - 5;
+        panorama.render_backdrop(&mut frame, ground_y, false, false);
+
+        println!(
+            "--- VISUAL QA: BRIDGE APPROACH ({width}x{height}) ---\n{}",
+            buffer_to_string(&frame)
+        );
+
+        let count_on_row = |y: usize, matches: fn(char) -> bool| {
+            (0..width)
+                .filter(|&x| matches(frame.get(x, y as u16).unwrap().ch))
+                .count()
+        };
+        let brace_count = count_on_row(ground_y + 2, |glyph| matches!(glyph, '/' | '\\'));
+        let beam_count = count_on_row(ground_y + 3, |glyph| matches!(glyph, '=' | '_' | '-'));
+        let pier_count = count_on_row(ground_y + 4, |glyph| glyph == '|');
+
+        assert!(
+            brace_count < width as usize / 4,
+            "bridge braces should form open structural spans, not a full-width slash texture"
+        );
+        assert!(
+            beam_count < width as usize / 2,
+            "bridge girders should leave negative space between supports"
+        );
+        assert!(
+            (2..width as usize / 3).contains(&pier_count),
+            "bridge piers should appear as spaced supports beneath the route"
+        );
+    }
+}
+
+#[test]
 fn compact_glide_renders_a_deployed_kite_over_the_traveler() {
     let mut game = RunnerState::new(80, 24, 0x12345678);
     game.world.chunks.clear();

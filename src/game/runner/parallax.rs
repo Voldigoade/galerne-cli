@@ -156,6 +156,28 @@ const WISP_A: &[&str] = &[r"      ~~~~~~~\_                    ."];
 const WISP_B: &[&str] = &[r"                 .       ~~~~~~~~~~"];
 const VINES: &[&str] = &[r"  v    /\     v       /\    v   /\"];
 
+const BRIDGE_SPAN_WIDTH: i32 = 48;
+const BRIDGE_SPANS: &[&[&str]] = &[
+    &[
+        "   |              |                 |",
+        "  /|\\            /|\\               /|\\",
+        "__/ | \\_____/ | \\______/ | \\___/ |",
+        "   ||            ||                ||",
+    ],
+    &[
+        "|             |                 |",
+        "|\\           /|\\               /|",
+        "| \\___/ |  \\_____/ |  \\___/ |",
+        "||           ||                ||",
+    ],
+    &[
+        "     |                  |       |",
+        "    /|\\                /|\\     /|\\",
+        "  / | \\____/  |   \\___/ |  \\_/",
+        "    ||                 ||      ||",
+    ],
+];
+
 const CABLE_BRIDGE: &[&str] = &[
     r"                                  .",
     r"                    ___..----..___",
@@ -541,56 +563,35 @@ impl ParallaxEngine {
                 Color::White
             };
             buf.set_char(x as u16, ground_y as u16, '=', rail_color, Color::Black);
-
-            if ground_y + 1 < height {
-                let sleeper_ch = if (x + self.ground_offset as usize).is_multiple_of(4) {
-                    '|'
-                } else {
-                    '-'
-                };
-                buf.set_char(
-                    x as u16,
-                    (ground_y + 1) as u16,
-                    sleeper_ch,
-                    Color::DarkGrey,
-                    Color::Black,
-                );
-            }
-
-            if ground_y + 2 < height {
-                let truss_ch = if (x + self.ground_offset as usize) % 4 < 2 {
-                    '/'
-                } else {
-                    '\\'
-                };
-                buf.set_char(
-                    x as u16,
-                    (ground_y + 2) as u16,
-                    truss_ch,
-                    Color::DarkGrey,
-                    Color::Black,
-                );
-            }
-
-            if ground_y + 3 < height {
-                buf.set_char(
-                    x as u16,
-                    (ground_y + 3) as u16,
-                    '=',
-                    Color::DarkGrey,
-                    Color::Black,
-                );
-            }
-
-            if ground_y + 4 < height {
-                let pier_col = (x + self.ground_offset as usize) % 24;
-                if pier_col == 0 || pier_col == 5 {
-                    for py in (ground_y + 4)..height {
-                        buf.set_char(x as u16, py as u16, '|', Color::DarkGrey, Color::Black);
-                    }
-                }
-            }
         }
+
+        draw_bridge_understructure(buf, ground_y, self.ground_offset, relay_restored);
+    }
+}
+
+fn draw_bridge_understructure(
+    buf: &mut Buffer,
+    ground_y: usize,
+    offset: f32,
+    relay_restored: bool,
+) {
+    let scroll_x = offset.floor() as i32;
+    let first_span = scroll_x.div_euclid(BRIDGE_SPAN_WIDTH);
+    let visible_span_count = (buf.width() as i32 + BRIDGE_SPAN_WIDTH - 1) / BRIDGE_SPAN_WIDTH + 1;
+
+    for span_offset in 0..visible_span_count {
+        let span_index = first_span + span_offset;
+        let span_x = span_index * BRIDGE_SPAN_WIDTH - scroll_x;
+        let art_index = span_index.rem_euclid(BRIDGE_SPANS.len() as i32) as usize;
+        draw_scene_art(
+            buf,
+            0.0,
+            span_x,
+            ground_y as i32 + 1,
+            BRIDGE_SPANS[art_index],
+            Color::DarkGrey,
+            relay_restored,
+        );
     }
 }
 
