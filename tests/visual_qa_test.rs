@@ -4,7 +4,7 @@ use galerne::game::runner::wind::TailwindTier;
 use galerne::storage::schema::SaveState;
 use galerne::terminal::buffer::Buffer;
 use galerne::ui::dashboard::render_refuge_panel;
-use galerne::ui::i18n::Locale;
+use galerne::ui::i18n::{t, Locale, ALL_LOCALES};
 
 fn buffer_to_string(buf: &Buffer) -> String {
     let mut out = String::new();
@@ -214,8 +214,9 @@ fn test_visual_qa_refuge_dormant_and_restored_80x24() {
         "--- VISUAL QA: REFUGE (DORMANT) (80x24) ---\n{}",
         rendered_dormant
     );
-    assert!(rendered_dormant.contains("Dormant"));
-    assert!(rendered_dormant.contains("ABANDONED VIADUCT GANTRY"));
+    assert!(rendered_dormant.contains("Status: quiet"));
+    assert!(rendered_dormant.contains("[====]"));
+    assert!(!rendered_dormant.contains("ABANDONED VIADUCT GANTRY"));
 
     // 2. Restored refuge
     let mut restored_save = SaveState::default();
@@ -229,7 +230,22 @@ fn test_visual_qa_refuge_dormant_and_restored_80x24() {
         "--- VISUAL QA: REFUGE (RESTORED) (80x24) ---\n{}",
         rendered_restored
     );
-    assert!(rendered_restored.contains("Operational"));
-    assert!(rendered_restored.contains("POWERED VIADUCT GANTRY"));
+    assert!(rendered_restored.contains("Status: lit"));
+    assert!(rendered_restored.contains("[====]"));
+    assert!(!rendered_restored.contains("POWERED VIADUCT GANTRY"));
     assert!(rendered_restored.contains("Kael: Stationed at the observation window"));
+}
+
+#[test]
+fn test_refuge_panel_uses_selected_locale() {
+    for &locale in ALL_LOCALES {
+        let mut buf = Buffer::new(100, 24);
+        render_refuge_panel(&mut buf, &SaveState::default(), 2, 2, locale);
+        let rendered = buffer_to_string(&buf);
+        assert!(
+            rendered.contains(t("refuge_dormant_status", locale)),
+            "refuge status should use locale {:?}",
+            locale
+        );
+    }
 }

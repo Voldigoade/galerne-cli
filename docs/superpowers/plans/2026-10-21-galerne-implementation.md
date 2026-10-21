@@ -1,3 +1,5 @@
+> **Historical, obsolete plan:** This implementation plan describes the rejected survivor-arena game. It is retained for history and is not an implementation guide for current work.
+
 # Galerne Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

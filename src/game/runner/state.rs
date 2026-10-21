@@ -1,5 +1,5 @@
 //! Master runner game state coordinating player physics, chunk scrolling,
-//! collision avoidance, instant pickups, minimal HUD, and deterministic resumption.
+//! collision avoidance, pickups, a compact HUD, and deterministic resumption.
 
 use serde::{Deserialize, Serialize};
 
@@ -79,6 +79,8 @@ pub struct RunnerState {
     pub secret_cache_found: bool,
     #[serde(default)]
     pub tailwind_tier: TailwindTier,
+    #[serde(skip)]
+    locale: Locale,
     #[serde(default)]
     pub unlocked_checkpoints: Vec<u32>,
     #[serde(default)]
@@ -115,9 +117,14 @@ impl RunnerState {
             companion_met: false,
             secret_cache_found: false,
             tailwind_tier: TailwindTier::None,
+            locale: Locale::En,
             unlocked_checkpoints: vec![0],
             collected_relics: Vec::new(),
         }
+    }
+
+    pub fn set_locale(&mut self, locale: Locale) {
+        self.locale = locale;
     }
 
     pub fn resize(&mut self, new_w: usize, new_h: usize) {
@@ -279,7 +286,6 @@ impl RunnerState {
             0.0
         };
 
-        // 1. Wind currents interaction
         for chunk in self.world.active_chunks() {
             let chunk_start_x = (chunk.index * CHUNK_WIDTH) as f32;
             for wind in &chunk.wind_currents {
@@ -320,7 +326,6 @@ impl RunnerState {
             }
         }
 
-        // 2. Landmarks & Checkpoints interaction
         for chunk in self.world.active_chunks_mut() {
             let chunk_start_x = (chunk.index * CHUNK_WIDTH) as f32;
             for lm in &mut chunk.landmarks {
@@ -335,10 +340,22 @@ impl RunnerState {
                                 self.last_checkpoint_id = *id;
                                 self.last_checkpoint_distance = self.distance;
                                 self.player.invulnerable_timer = 1.5;
+                                let translated_name = match name_key.as_str() {
+                                    "cp_departure" => t("cp_departure", self.locale),
+                                    "cp_shanty_outpost" => t("cp_shanty_outpost", self.locale),
+                                    "cp_shaft_airlock" => t("cp_shaft_airlock", self.locale),
+                                    "cp_high_roost" => t("cp_high_roost", self.locale),
+                                    "cp_relay_node" => t("cp_relay_node", self.locale),
+                                    _ => name_key.as_str(),
+                                };
                                 self.floating_indicators.push(FloatingIndicator::new(
                                     self.player.x + 1.0,
                                     self.player.y - 4.5,
-                                    format!("[+] CHECKPOINT: {}", *name_key),
+                                    crate::ui::i18n::format_message(
+                                        "checkpoint_message",
+                                        self.locale,
+                                        &[("name", translated_name.to_owned())],
+                                    ),
                                 ));
                             }
                         }
@@ -349,7 +366,7 @@ impl RunnerState {
                                 self.floating_indicators.push(FloatingIndicator::new(
                                     self.player.x + 1.0,
                                     self.player.y - 5.5,
-                                    "Kael: 'The Gale Node lies ahead across the rift...'",
+                                    t("kael_encounter_dialogue", self.locale),
                                 ));
                             }
                         }
@@ -360,7 +377,7 @@ impl RunnerState {
                                 self.floating_indicators.push(FloatingIndicator::new(
                                     self.player.x + 1.0,
                                     self.player.y - 5.0,
-                                    "SECRET CACHE DISCOVERED!",
+                                    t("cache_found", self.locale),
                                 ));
                             }
                         }
@@ -372,7 +389,7 @@ impl RunnerState {
                                 self.floating_indicators.push(FloatingIndicator::new(
                                     self.player.x + 1.0,
                                     self.player.y - 5.5,
-                                    "RELAY STATION 04 RESTORED!",
+                                    t("relay_restored", self.locale),
                                 ));
                             }
                         }
@@ -381,7 +398,6 @@ impl RunnerState {
             }
         }
 
-        // 3. Items and Pickups
         for chunk in self.world.active_chunks_mut() {
             let chunk_start_x = (chunk.index * CHUNK_WIDTH) as f32;
             for item in &mut chunk.items {
@@ -410,7 +426,6 @@ impl RunnerState {
                 }
             }
 
-            // 4. Obstacles
             if self.player.invulnerable_timer <= 0.0 && !collided {
                 for obs in &chunk.obstacles {
                     let (o_x1, o_y1, o_x2, o_y2) = obs.bounding_box(chunk_start_x);
@@ -443,7 +458,11 @@ impl RunnerState {
                 self.floating_indicators.push(FloatingIndicator::new(
                     self.player.x + 1.0,
                     self.player.y - 4.5,
-                    format!("+{} SHARDS", gain),
+                    crate::ui::i18n::format_message(
+                        "pickup_shards",
+                        self.locale,
+                        &[("count", gain.to_string())],
+                    ),
                 ));
             }
             ItemKind::SpeedSurge => {
@@ -452,7 +471,7 @@ impl RunnerState {
                 self.floating_indicators.push(FloatingIndicator::new(
                     self.player.x + 1.0,
                     self.player.y - 4.5,
-                    ">> SPEED SURGE",
+                    t("pickup_speed", self.locale),
                 ));
             }
             ItemKind::WindShield => {
@@ -462,7 +481,7 @@ impl RunnerState {
                 self.floating_indicators.push(FloatingIndicator::new(
                     self.player.x + 1.0,
                     self.player.y - 4.5,
-                    "+1 SHIELD (O)",
+                    t("pickup_shield", self.locale),
                 ));
             }
             ItemKind::ShardMagnet => {
@@ -470,7 +489,7 @@ impl RunnerState {
                 self.floating_indicators.push(FloatingIndicator::new(
                     self.player.x + 1.0,
                     self.player.y - 4.5,
-                    "[+] MAGNET ATTRACTOR",
+                    t("pickup_magnet", self.locale),
                 ));
             }
             ItemKind::FlowMultiplier => {
@@ -479,7 +498,7 @@ impl RunnerState {
                 self.floating_indicators.push(FloatingIndicator::new(
                     self.player.x + 1.0,
                     self.player.y - 4.5,
-                    "x2 FLOW MULTIPLIER",
+                    t("pickup_flow", self.locale),
                 ));
             }
             ItemKind::ResonanceCore => {
@@ -487,7 +506,14 @@ impl RunnerState {
                 self.floating_indicators.push(FloatingIndicator::new(
                     self.player.x + 1.0,
                     self.player.y - 5.0,
-                    "RESONANCE CORE ACQUIRED",
+                    crate::ui::i18n::format_message(
+                        "item_acquired",
+                        self.locale,
+                        &[(
+                            "name",
+                            t("item_resonance_core_name", self.locale).to_owned(),
+                        )],
+                    ),
                 ));
             }
             ItemKind::InductionFilament => {
@@ -495,7 +521,14 @@ impl RunnerState {
                 self.floating_indicators.push(FloatingIndicator::new(
                     self.player.x + 1.0,
                     self.player.y - 5.0,
-                    "INDUCTION FILAMENT ACQUIRED",
+                    crate::ui::i18n::format_message(
+                        "item_acquired",
+                        self.locale,
+                        &[(
+                            "name",
+                            t("item_induction_filament_name", self.locale).to_owned(),
+                        )],
+                    ),
                 ));
             }
             ItemKind::AncientCompass => {
@@ -503,7 +536,14 @@ impl RunnerState {
                 self.floating_indicators.push(FloatingIndicator::new(
                     self.player.x + 1.0,
                     self.player.y - 5.0,
-                    "ANCIENT COMPASS ACQUIRED",
+                    crate::ui::i18n::format_message(
+                        "item_acquired",
+                        self.locale,
+                        &[(
+                            "name",
+                            t("item_ancient_compass_name", self.locale).to_owned(),
+                        )],
+                    ),
                 ));
             }
         }
@@ -517,7 +557,7 @@ impl RunnerState {
             self.floating_indicators.push(FloatingIndicator::new(
                 self.player.x + 1.0,
                 self.player.y - 4.5,
-                "SHIELD BROKEN",
+                t("shield_broken", self.locale),
             ));
         } else {
             // Safe respawn at last checkpoint without losing items or discoveries
@@ -533,7 +573,7 @@ impl RunnerState {
             self.floating_indicators.push(FloatingIndicator::new(
                 self.player.x + 1.0,
                 self.player.y - 4.5,
-                "RESPAWN AT CHECKPOINT",
+                t("respawn_checkpoint", self.locale),
             ));
         }
     }
@@ -543,12 +583,10 @@ impl RunnerState {
         let height = buf.height() as usize;
         let ground_y = self.world.ground_y;
 
-        // 1. Render multi-layer parallax backdrop
         self.world
             .parallax
             .render_backdrop(buf, ground_y, self.relay_restored);
 
-        // 2. Interior Gantry Roof for Sector 2
         let current_sector = sector_for_distance(self.distance);
         if current_sector == SectorKind::InteriorGantry {
             let ceiling_y = ground_y.saturating_sub(8);
@@ -575,7 +613,6 @@ impl RunnerState {
             }
         }
 
-        // 3. Render wind currents
         for chunk in self.world.active_chunks() {
             let chunk_start_x = (chunk.index * CHUNK_WIDTH) as f32;
             for wind in &chunk.wind_currents {
@@ -596,7 +633,6 @@ impl RunnerState {
             }
         }
 
-        // 4. Render landmarks
         for chunk in self.world.active_chunks() {
             let chunk_start_x = (chunk.index * CHUNK_WIDTH) as f32;
             for lm in &chunk.landmarks {
@@ -623,7 +659,6 @@ impl RunnerState {
             }
         }
 
-        // 5. Render chunk obstacles and items
         for chunk in self.world.active_chunks() {
             let chunk_start_x = (chunk.index * CHUNK_WIDTH) as f32;
 
@@ -683,7 +718,6 @@ impl RunnerState {
             }
         }
 
-        // 6. Relay Restoration Wave Sequence
         if let Some(t) = self.relay_activation_timer {
             let phase = ((1.5 - t) * 8.0) as usize;
             let wave_symbols = ["~", "*", "+", "#", "*"];
@@ -699,7 +733,6 @@ impl RunnerState {
             }
         }
 
-        // 7. Render Player
         let player_sprite = self.player.current_sprite();
         let base_y = self.player.y.round() as usize;
         let is_invulnerable = self.player.invulnerable_timer > 0.0;
@@ -723,7 +756,6 @@ impl RunnerState {
             }
         }
 
-        // 8. Render floating indicators
         for ind in &self.floating_indicators {
             let draw_x = ind.x.round() as u16;
             let draw_y = ind.y.round() as u16;
@@ -737,7 +769,6 @@ impl RunnerState {
             }
         }
 
-        // 9. Minimal Atmospheric Top HUD
         let hud_dist_label = t("hud_distance", locale);
         let hud_spd_label = t("hud_speed", locale);
         let hud_flow_label = t("hud_multiplier", locale);
@@ -751,7 +782,14 @@ impl RunnerState {
         };
 
         let tailwind_label = if self.tailwind_tier != TailwindTier::None {
-            format!(" │ {}", self.tailwind_tier.label())
+            let key = match self.tailwind_tier {
+                TailwindTier::None => unreachable!(),
+                TailwindTier::Tier1 => "tailwind_1",
+                TailwindTier::Tier2 => "tailwind_2",
+                TailwindTier::Tier3 => "tailwind_3",
+                TailwindTier::Tier4 => "tailwind_4",
+            };
+            format!(" │ {}", t(key, locale))
         } else {
             String::new()
         };
@@ -777,7 +815,6 @@ impl RunnerState {
             Style::new(Color::White, Color::Black).bold(),
         );
 
-        // Optional onboarding prompt
         if let Some(prompt_key) = self.current_prompt() {
             let prompt_text = t(prompt_key, locale);
             let prompt_x = (width.saturating_sub(prompt_text.len())) / 2;

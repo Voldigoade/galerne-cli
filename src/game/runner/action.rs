@@ -63,7 +63,7 @@ impl Default for ActionState {
     }
 }
 
-/// Short input buffer allowing early key presses (< 150ms) to trigger upon landing or recovery.
+/// Short input buffer for presses made just before landing or recovery.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct InputBuffer {
     pub buffered_input: Option<PlayerInputWrapper>,

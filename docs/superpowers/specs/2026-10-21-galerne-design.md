@@ -1,3 +1,5 @@
+> **Historical, obsolete design:** This specification describes the rejected survivor-arena game. It is retained as project history and is not current product direction.
+
 # Galerne Design Specification
 
 **Date:** 2026-10-21  

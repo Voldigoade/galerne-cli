@@ -121,7 +121,6 @@ impl RunnerPlayer {
                         elapsed_secs: 0.0,
                     };
                 } else {
-                    // Buffer jump for when player touches down
                     self.input_buffer.push(PlayerInput::Jump);
                 }
             }
@@ -131,7 +130,6 @@ impl RunnerPlayer {
                         remaining_secs: SLIDE_DURATION_SECS,
                     };
                 } else {
-                    // Buffer slide for landing
                     self.input_buffer.push(PlayerInput::Slide);
                 }
             }

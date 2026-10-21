@@ -316,7 +316,6 @@ impl SaveManager {
             }
         }
 
-        // Initialize fresh state
         self.save(&SaveState::default())?;
         let backup_path = self.backup_save_path();
         if backup_path.exists() {
@@ -356,7 +355,7 @@ impl SaveManager {
             ));
         }
 
-        // Validate archive integrity before restoring
+        // An archive is untrusted input; validate its header, checksum, and schema before replacing the active save.
         let state = self.load_file(&archive_path)?;
         self.save(&state)
     }

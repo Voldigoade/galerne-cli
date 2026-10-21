@@ -65,16 +65,13 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
     let start_time = Instant::now();
     let mut wait_time_accounting = WaitTimeAccounting::default();
 
-    // Install cross-platform Ctrl+C handler
     signal::setup_handler();
     signal::reset();
 
-    // Spawn child process
     let mut supervisor = ProcessSupervisor::spawn(args)?;
 
     let anti_flicker_delay = Duration::from_millis(decision.effective_delay_ms());
 
-    // Phase 1: Pre-game observation period with live output streaming
     let observation_start = Instant::now();
     let mut child_completed_early = None;
 
@@ -99,7 +96,6 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
     }
 
     if let Some(status) = child_completed_early {
-        // Task completed within observation window. Flush any remaining logs.
         print_buffered_logs(&supervisor);
         let duration_secs = start_time.elapsed().as_secs_f32();
         if !is_cancelled_status(false, &status) {
@@ -111,7 +107,6 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
             .unwrap_or(if status.success() { 0 } else { 1 }));
     }
 
-    // Phase 2: Enter Game View
     let guard = TerminalGuard::enter()?;
     let mut engine = Engine::new()?;
 
@@ -121,6 +116,7 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
         engine.height() as usize,
         rand_seed(),
     );
+    game.set_locale(locale);
     let predicted_secs = history
         .median_duration(&project_id, matched_class)
         .unwrap_or(0.0);
@@ -145,14 +141,12 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
     let mut next_input = None;
 
     while child_completed_in_game.is_none() && !left_game_view {
-        // Check if child process has finished
         if let Some(status) = supervisor.try_wait()? {
             let completion_duration = start_time.elapsed();
             game.start_completion_transition(status.success());
             child_completed_in_game = Some((status, completion_duration));
         }
 
-        // Handle user input
         while let Some(ev) = Engine::poll_event(Duration::from_millis(0))? {
             match ev {
                 // FIRST Ctrl+C or Esc/q: leaves game view immediately without killing child task!
@@ -194,7 +188,6 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
             break;
         }
 
-        // Tick simulation
         let now = Instant::now();
         let dt = (now - last_frame).as_secs_f32().min(0.1);
         last_frame = now;
@@ -206,7 +199,6 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
             break;
         }
 
-        // Render frame
         if engine.is_too_small() {
             engine.render_too_small_notice();
         } else {
@@ -215,19 +207,16 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
         }
         engine.flush()?;
 
-        // Frame timing limiter
         let elapsed = last_frame.elapsed();
         if elapsed < target_frame_duration {
             thread::sleep(target_frame_duration - elapsed);
         }
     }
 
-    // Calculate progression earned during wait time
     let dist_gained = (game.distance - initial_dist).max(0.0);
     let shards_gained = game.shards_collected.saturating_sub(initial_shards);
     let total_duration = start_time.elapsed().as_secs();
 
-    // Persist career stats and exact active run
     save_state.total_play_time_secs += total_duration;
     if let Some((_, completion_duration)) = child_completed_in_game.as_ref() {
         wait_time_accounting.record_completion(&mut save_state, *completion_duration);
@@ -300,7 +289,6 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
     }
 
     if let Some((status, completion_duration)) = child_completed_in_game {
-        // Child completed while in game view: play brief completion transition
         let true_duration = completion_duration.as_secs_f32();
         run_completion_transition(
             &mut engine,
@@ -312,7 +300,6 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
         // Restore terminal to cooked mode
         drop(guard);
 
-        // Print only buffered lines that arrived during game view
         print_buffered_logs(&supervisor);
 
         if !is_cancelled_status(false, &status) {
@@ -328,7 +315,6 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
     // First Ctrl+C or Esc/q triggered: restore cooked terminal mode immediately
     drop(guard);
 
-    // Print all buffered lines collected during game view
     print_buffered_logs(&supervisor);
 
     // Enter Task View: live streaming until child finishes or second Ctrl+C arrives
@@ -336,13 +322,11 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
 
     let mut was_cancelled = false;
     let exit_status = loop {
-        // Check if child has terminated
         if let Some(status) = supervisor.try_wait()? {
             print_buffered_logs(&supervisor);
             break status;
         }
 
-        // Check for second Ctrl+C in task view
         if signal::is_interrupted() {
             was_cancelled = true;
             let _ = supervisor.send_interrupt();
@@ -351,7 +335,6 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
             break status;
         }
 
-        // Stream arriving output live
         print_buffered_logs(&supervisor);
         thread::sleep(Duration::from_millis(20));
     };

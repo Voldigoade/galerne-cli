@@ -1,4 +1,4 @@
-//! Galerne — Ultra-lightweight persistent terminal game designed for developer wait times.
+//! Galerne — Native terminal game designed for developer wait times.
 
 pub mod game;
 pub mod interceptor;

@@ -1,4 +1,4 @@
-//! Read-only system diagnostics verifying terminal, storage, and shell integration health.
+//! Checks for terminal, storage, and shell integration health.
 
 use std::env;
 use std::fs;
@@ -8,174 +8,207 @@ use crossterm::terminal;
 
 use crate::shell::installer::{detect_shell_configs, START_MARKER};
 use crate::storage::manager::SaveManager;
+use crate::ui::i18n::{format_message, t, Locale};
 
-/// A single live diagnostic assessment.
 #[derive(Clone, Debug)]
 pub struct DiagnosticItem {
-    pub label: &'static str,
-    pub status: String,
+    pub label_key: &'static str,
+    pub status_key: &'static str,
+    pub status_args: Vec<(&'static str, String)>,
     pub is_ok: bool,
 }
 
-/// Gathers genuine, empirical system diagnostic findings.
-pub fn collect_diagnostics() -> Vec<DiagnosticItem> {
-    let mut items = Vec::new();
-
-    // 1. Platform
-    let os = env::consts::OS;
-    let arch = env::consts::ARCH;
-    items.push(DiagnosticItem {
-        label: "Target Platform",
-        status: format!("{} {}", os, arch),
-        is_ok: true,
-    });
-
-    // 2. Interactive TTY
-    let is_tty = io::stdout().is_terminal();
-    items.push(DiagnosticItem {
-        label: "Standard Output",
-        status: if is_tty {
-            "Interactive ANSI TTY".to_string()
-        } else {
-            "Non-interactive pipe".to_string()
-        },
-        is_ok: is_tty,
-    });
-
-    // 3. Dimensions
-    if let Ok((w, h)) = terminal::size() {
-        let ok = w >= 60 && h >= 20;
-        items.push(DiagnosticItem {
-            label: "Terminal Size",
-            status: format!("{}x{} (min 60x20)", w, h),
-            is_ok: ok,
-        });
-    } else {
-        items.push(DiagnosticItem {
-            label: "Terminal Size",
-            status: "Unknown dimensions".to_string(),
-            is_ok: false,
-        });
+impl DiagnosticItem {
+    fn new(
+        label_key: &'static str,
+        status_key: &'static str,
+        status_args: Vec<(&'static str, String)>,
+        is_ok: bool,
+    ) -> Self {
+        Self {
+            label_key,
+            status_key,
+            status_args,
+            is_ok,
+        }
     }
 
-    // 4. Color Capability
-    let no_color = env::var("NO_COLOR").is_ok();
-    items.push(DiagnosticItem {
-        label: "Color Depth",
-        status: if no_color {
-            "NO_COLOR requested".to_string()
-        } else {
-            "ANSI 16 / 256 Colors".to_string()
-        },
-        is_ok: !no_color,
-    });
+    pub fn label(&self, locale: Locale) -> &'static str {
+        t(self.label_key, locale)
+    }
 
-    // 5. Storage Directory Accessibility
+    pub fn status(&self, locale: Locale) -> String {
+        format_message(self.status_key, locale, &self.status_args)
+    }
+}
+
+pub fn collect_diagnostics() -> Vec<DiagnosticItem> {
+    let mut items = Vec::new();
+    items.push(DiagnosticItem::new(
+        "target_platform",
+        "doctor_platform",
+        vec![
+            ("os", env::consts::OS.to_owned()),
+            ("arch", env::consts::ARCH.to_owned()),
+        ],
+        true,
+    ));
+
+    let is_tty = io::stdout().is_terminal();
+    items.push(DiagnosticItem::new(
+        "standard_output",
+        if is_tty {
+            "doctor_tty_interactive"
+        } else {
+            "doctor_tty_pipe"
+        },
+        Vec::new(),
+        is_tty,
+    ));
+
+    match terminal::size() {
+        Ok((width, height)) => {
+            items.push(DiagnosticItem::new(
+                "terminal_size",
+                "doctor_terminal_dimensions",
+                vec![("width", width.to_string()), ("height", height.to_string())],
+                width >= 60 && height >= 20,
+            ));
+        }
+        Err(_) => items.push(DiagnosticItem::new(
+            "terminal_size",
+            "doctor_terminal_unknown",
+            Vec::new(),
+            false,
+        )),
+    }
+
+    let no_color = env::var("NO_COLOR").is_ok();
+    items.push(DiagnosticItem::new(
+        "doctor_color_setting",
+        if no_color {
+            "doctor_color_disabled"
+        } else {
+            "doctor_color_ansi"
+        },
+        Vec::new(),
+        !no_color,
+    ));
+
     let save_manager = SaveManager::default_paths();
     let data_dir = save_manager.data_dir();
-    let dir_accessible = if data_dir.exists() {
-        fs::metadata(data_dir)
-            .map(|m| !m.permissions().readonly())
-            .unwrap_or(false)
+    let data_dir_status = if data_dir.exists() {
+        match fs::metadata(data_dir) {
+            Ok(metadata) if !metadata.permissions().readonly() => (
+                "doctor_storage_writable",
+                format!("{}", data_dir.display()),
+                true,
+            ),
+            _ => (
+                "doctor_storage_denied",
+                format!("{}", data_dir.display()),
+                false,
+            ),
+        }
     } else {
-        fs::create_dir_all(data_dir).is_ok()
+        (
+            "doctor_storage_uncreated",
+            format!("{}", data_dir.display()),
+            true,
+        )
     };
-    items.push(DiagnosticItem {
-        label: "Data Storage",
-        status: if dir_accessible {
-            format!("Writable ({})", data_dir.display())
-        } else {
-            format!("Permission Denied ({})", data_dir.display())
-        },
-        is_ok: dir_accessible,
-    });
+    items.push(DiagnosticItem::new(
+        "data_storage",
+        data_dir_status.0,
+        vec![("path", data_dir_status.1)],
+        data_dir_status.2,
+    ));
 
-    // 6. Save State & CRC32 Integrity
     let primary_save = save_manager.primary_save_path();
     if primary_save.exists() {
         match save_manager.load() {
-            Ok(state) => {
-                items.push(DiagnosticItem {
-                    label: "Save Integrity",
-                    status: format!(
-                        "CRC32 Verified ({} shards, {} kills)",
-                        state.currency_shards, state.total_enemies_killed
-                    ),
-                    is_ok: true,
-                });
-            }
-            Err(e) => {
-                items.push(DiagnosticItem {
-                    label: "Save Integrity",
-                    status: format!("Corrupted ({})", e),
-                    is_ok: false,
-                });
-            }
+            Ok(state) => items.push(DiagnosticItem::new(
+                "save_integrity",
+                "doctor_save_valid",
+                vec![("shards", state.currency_shards.to_string())],
+                true,
+            )),
+            Err(error) => items.push(DiagnosticItem::new(
+                "save_integrity",
+                "doctor_save_error",
+                vec![("error", error.to_string())],
+                false,
+            )),
         }
     } else {
-        items.push(DiagnosticItem {
-            label: "Save Integrity",
-            status: "Fresh installation (No save file yet)".to_string(),
-            is_ok: true,
-        });
+        items.push(DiagnosticItem::new(
+            "save_integrity",
+            "doctor_save_missing",
+            Vec::new(),
+            true,
+        ));
     }
 
-    // 7. Backup presence
     let backup_save = save_manager.backup_save_path();
-    items.push(DiagnosticItem {
-        label: "Known-Good Backup",
-        status: if backup_save.exists() {
-            "Present".to_string()
+    items.push(DiagnosticItem::new(
+        "backup_label",
+        if backup_save.exists() {
+            "doctor_backup_present"
         } else {
-            "None (Created after second save)".to_string()
+            "doctor_backup_pending"
         },
-        is_ok: true,
-    });
+        Vec::new(),
+        true,
+    ));
 
-    // 8. Shell Integration Status
     let detected_shells = detect_shell_configs();
-    let mut integrated_count = 0;
-    for (_shell, path) in &detected_shells {
-        if let Ok(content) = fs::read_to_string(path) {
-            if content.contains(START_MARKER) {
-                integrated_count += 1;
-            }
-        }
-    }
-    items.push(DiagnosticItem {
-        label: "Shell Hooks",
-        status: if integrated_count > 0 {
-            format!("Active in {} detected configs", integrated_count)
+    let integrated_count = detected_shells
+        .iter()
+        .filter(|(_, path)| {
+            fs::read_to_string(path)
+                .map(|content| content.contains(START_MARKER))
+                .unwrap_or(false)
+        })
+        .count();
+    items.push(DiagnosticItem::new(
+        "shell_hook",
+        if integrated_count > 0 {
+            "doctor_shell_active"
         } else {
-            "Not installed (`galerne setup` to configure)".to_string()
+            "doctor_shell_missing"
         },
-        is_ok: integrated_count > 0,
-    });
+        vec![("count", integrated_count.to_string())],
+        integrated_count > 0,
+    ));
 
-    // 9. Background Daemons
-    items.push(DiagnosticItem {
-        label: "Resident Daemons",
-        status: "None (0 MiB resident / 0% CPU)".to_string(),
-        is_ok: true,
-    });
-
-    // 10. Network Policy
-    items.push(DiagnosticItem {
-        label: "Network Policy",
-        status: "Fully Offline (Zero network/telemetry)".to_string(),
-        is_ok: true,
-    });
+    items.push(DiagnosticItem::new(
+        "resident_daemons",
+        "doctor_background_none",
+        Vec::new(),
+        true,
+    ));
+    items.push(DiagnosticItem::new(
+        "network_policy",
+        "doctor_network_update_only",
+        Vec::new(),
+        true,
+    ));
 
     items
 }
 
-/// Runs diagnostic verification checks and prints an actionable summary report.
 pub fn run_doctor() -> io::Result<()> {
-    println!("Galerne v{} System Diagnostics\n", crate::VERSION);
+    let locale = Locale::detect();
+    println!(
+        "Galerne v{} {}\n",
+        crate::VERSION,
+        t("doctor_title", locale)
+    );
 
     let current_exe = env::current_exe().unwrap_or_default();
     println!(
-        "[✓] Executable:        {} (v{})",
+        "[✓] {}: {} (v{})",
+        t("executable", locale),
         current_exe.display(),
         crate::VERSION
     );
@@ -185,11 +218,11 @@ pub fn run_doctor() -> io::Result<()> {
         println!(
             "[{}] {:<18} {}",
             symbol,
-            format!("{}:", item.label),
-            item.status
+            format!("{}:", item.label(locale)),
+            item.status(locale)
         );
     }
 
-    println!("\nDiagnostic verification complete.");
+    println!("\n{}", t("doctor_complete", locale));
     Ok(())
 }

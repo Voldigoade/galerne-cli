@@ -33,7 +33,7 @@ impl Landmark {
         match &self.kind {
             LandmarkKind::CheckpointPylon { .. } => &[" [+] ", "/===\\", "| # |", "|---|"],
             LandmarkKind::CompanionKael { .. } => &[" ,(^)  ", "<{#}>~ ", "==[#]==="],
-            LandmarkKind::SecretCache { .. } => &[" [CACHE] ", "==[***]=="],
+            LandmarkKind::SecretCache { .. } => &["  .---.  ", "=[*###*]="],
             LandmarkKind::RelayNodeConsole { .. } => {
                 &["   /|\\   ", "  [|04|] ", " /======\\", " |[====]|"]
             }

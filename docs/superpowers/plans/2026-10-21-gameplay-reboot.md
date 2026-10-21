@@ -1,3 +1,5 @@
+> **Historical foundation plan:** This document describes an early runner prototype and is not an accepted final game design. The current branch continues toward a persistent adventure.
+
 # Galerne Gameplay Reboot: Terminal-Native Endless Runner Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

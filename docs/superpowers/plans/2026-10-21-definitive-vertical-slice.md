@@ -1,3 +1,5 @@
+> **Unapproved historical proposal:** Region names, characters, features, and progression in this draft were never approved as canon. Treat them as implementation history, not current product direction.
+
 # Definitive Gameplay & World Vertical Slice Plan
 
 ## 1. Vision & Architecture

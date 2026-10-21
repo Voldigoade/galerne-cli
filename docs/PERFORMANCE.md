@@ -2,6 +2,8 @@
 
 Resource consumption is a primary product feature. All performance assertions must be backed by reproducible empirical measurements.
 
+The budgets below are targets, not current measurements. The figures in `docs/measurements/2026-10-21-baseline.md` describe an earlier build and do not establish performance for the current branch.
+
 ## Performance Budgets
 
 Target constraints for release builds on standard developer machines (Linux x86_64 and Windows x86_64):
@@ -10,8 +12,8 @@ Target constraints for release builds on standard developer machines (Linux x86_
 - **Binary Size (Stripped Release)**: Target < 5 MB (ideally < 2 MB, subject to audited crate dependencies).
 - **Resident Memory (RSS)**: < 20 MB during active gameplay.
 - **Peak Memory**: < 30 MB high-water mark.
-- **CPU Utilization (Idle / Waiting for Input)**: 0.0% CPU usage (event-driven polling or bounded timer wait; no busy spin).
-- **Rendering Bandwidth**: Double-buffered diff updates; avoid full-screen redraws to maintain instant response over remote shells or low-bandwidth terminals.
+- **CPU Utilization (Idle / Waiting for Input)**: Avoid sustained CPU use while waiting for input; measure on the current binary and terminal before making claims.
+- **Rendering Bandwidth**: Use double-buffered diff updates and avoid full-screen redraws to keep terminal output responsive over remote shells and low-bandwidth connections.
 
 ## Measurement Records
 

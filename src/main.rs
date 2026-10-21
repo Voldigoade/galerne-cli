@@ -8,6 +8,7 @@ use galerne::storage::manager::SaveManager;
 use galerne::storage::stats::format_career_stats;
 use galerne::ui::cli::{parse_cli_action, print_help, CliAction};
 use galerne::ui::dashboard::{run_dashboard, run_direct_play};
+use galerne::ui::i18n::Locale;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -24,13 +25,14 @@ fn main() {
         }
         CliAction::Play => {
             if let Err(e) = run_direct_play() {
-                eprintln!("Error launching Galerne combat session: {}", e);
+                eprintln!("Error launching Galerne journey: {}", e);
                 process::exit(1);
             }
         }
         CliAction::Stats => {
             let state = load_save_state(&save_manager);
-            println!("{}", format_career_stats(&state));
+            let locale = state.settings.locale.unwrap_or_else(Locale::detect);
+            println!("{}", format_career_stats(&state, locale));
         }
         CliAction::Doctor => {
             if let Err(e) = run_doctor() {

@@ -97,14 +97,4 @@ impl TailwindTier {
             TailwindTier::Tier4 => 0.5,
         }
     }
-
-    pub fn label(&self) -> &'static str {
-        match self {
-            TailwindTier::None => "",
-            TailwindTier::Tier1 => "TAILWIND I",
-            TailwindTier::Tier2 => "TAILWIND II",
-            TailwindTier::Tier3 => "TAILWIND III",
-            TailwindTier::Tier4 => "TAILWIND IV",
-        }
-    }
 }

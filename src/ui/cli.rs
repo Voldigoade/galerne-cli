@@ -77,12 +77,12 @@ pub fn parse_cli_action(args: &[String]) -> CliAction {
 
 pub fn print_help() {
     println!(
-        "Galerne {} — Ultra-lightweight persistent terminal game for developer wait times\n\n\
+        "Galerne {} — Native terminal game for developer wait times\n\n\
         USAGE:\n  \
-          galerne                     Open interactive control center\n  \
-          galerne play                Launch immediate manual gameplay session\n  \
+          galerne                     Open the journey dashboard\n  \
+          galerne play                Begin a manual journey\n  \
           galerne stats               Display career progression and wait time saved\n  \
-          galerne doctor              Run read-only system diagnostics\n  \
+          galerne doctor              Check terminal, saves, and shell integration\n  \
           galerne saves               Inspect active saves and archived backups\n  \
           galerne reset [-y|--yes]    Archive current progress and initialize fresh state\n  \
           galerne restore <archive>   Restore a previous archived save snapshot\n  \

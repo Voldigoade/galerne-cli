@@ -1,4 +1,4 @@
-//! Multi-layer parallax scenery engine creating visual depth with zero allocations.
+//! Multi-layer parallax scenery for the scrolling world.
 
 use serde::{Deserialize, Serialize};
 
@@ -46,7 +46,6 @@ impl ParallaxEngine {
         let sky_rows = (ground_y * 22 / 100).clamp(2, 8);
         let far_rows = (ground_y * 38 / 100).clamp(3, 16);
 
-        // 1. Sky & High Wind Currents (Top rows)
         let sky_patterns = [
             b"   ~--~       ' . '    ~~~~~        '   .     ~--~       ~~~~     .   '    ~--~       ",
             b" .     ` - - .       '    ~==~      .        '     ` - - ~     .     '     ` - - .    ",
@@ -67,7 +66,6 @@ impl ParallaxEngine {
             }
         }
 
-        // 2. Colossal Far Horizon (Monumental viaduct piers & distant suspension towers)
         let far_start = 1 + sky_rows;
         let far_end = (far_start + far_rows).min(ground_y.saturating_sub(2));
         if far_end > far_start {
@@ -108,7 +106,6 @@ impl ParallaxEngine {
             }
         }
 
-        // 3. Midground Infrastructure & Suspended Shanties
         let mid_start = far_end;
         let mid_end = ground_y.saturating_sub(1);
         if mid_end > mid_start {
@@ -148,11 +145,9 @@ impl ParallaxEngine {
             }
         }
 
-        // 4. Viaduct Deck & Heavy Cross-Truss Structure
         if ground_y < height {
             let rail_shift = (self.ground_offset as usize) % 4;
             for x in 0..width {
-                // Continuous iron track rails
                 let rail_color = if relay_restored {
                     Color::Cyan
                 } else {
@@ -160,7 +155,6 @@ impl ParallaxEngine {
                 };
                 buf.set_char(x as u16, ground_y as u16, '=', rail_color, Color::Black);
 
-                // Sleepers and iron ties
                 if ground_y + 1 < height {
                     let sleeper_ch = if (x + rail_shift).is_multiple_of(4) {
                         '|'
@@ -176,7 +170,6 @@ impl ParallaxEngine {
                     );
                 }
 
-                // Structural cross-trusses beneath track
                 if ground_y + 2 < height {
                     let truss_ch = if (x + rail_shift) % 4 < 2 { '/' } else { '\\' };
                     buf.set_char(
@@ -188,7 +181,6 @@ impl ParallaxEngine {
                     );
                 }
 
-                // Lower chord
                 if ground_y + 3 < height {
                     buf.set_char(
                         x as u16,
@@ -199,7 +191,6 @@ impl ParallaxEngine {
                     );
                 }
 
-                // Colossal support piers reaching into the chasm abyss
                 if ground_y + 4 < height {
                     let pier_col = (x + rail_shift) % 24;
                     if pier_col == 0 || pier_col == 5 {

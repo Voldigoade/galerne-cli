@@ -46,7 +46,7 @@ fn main() {
             "║               GALERNE NATIVE INSTALLER v{}               ║",
             galerne::VERSION
         );
-        println!("║   Ultra-light persistent terminal game for developer waits ║");
+        println!("║   Native terminal game for developer wait times            ║");
         println!("╚════════════════════════════════════════════════════════════╝\n");
     }
 
@@ -191,10 +191,10 @@ fn perform_install(silent: bool) {
     println!("╚════════════════════════════════════════════════════════════╝\n");
     println!("Quick Start:");
     println!("  1. Open a fresh terminal window (PowerShell, Bash, or Zsh).");
-    println!("  2. Run `galerne play` to jump into an immediate combat session.");
-    println!("  3. Run `galerne` to open the full interactive control dashboard.");
+    println!("  2. Run `galerne play` to begin a manual journey.");
+    println!("  3. Run `galerne` to open the journey dashboard.");
     println!("  4. Run your regular builds (cargo build, npm install, etc.) —");
-    println!("     Galerne will activate seamlessly for long builds (~150ms for known long, ~8s fallback)!\n");
+    println!("     Eligible long tasks can open Galerne while they run; short and unsupported tasks finish normally.\n");
 }
 
 fn perform_uninstall(silent: bool) {

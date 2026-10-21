@@ -1,4 +1,4 @@
-//! Interactive terminal control center dashboard and standalone game runner.
+//! Interactive terminal dashboard and standalone game entrypoints.
 
 use std::fs;
 use std::io;
@@ -19,7 +19,7 @@ use crate::storage::workshop::{
 use crate::terminal::buffer::{Color, Style};
 use crate::terminal::engine::Engine;
 use crate::terminal::guard::TerminalGuard;
-use crate::ui::i18n::{t, Locale};
+use crate::ui::i18n::{format_message, t, Locale};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum DashboardTab {
@@ -90,24 +90,24 @@ pub fn render_refuge_panel(
     let gantry_ascii = if is_restored {
         &[
             "       .---------------------------------------.       ",
-            "      /  [*]   POWERED VIADUCT GANTRY     [*]  \\      ",
+            "      /  [*]   /=======\\     [*]  \\      ",
             "     /===========================================\\     ",
-            "     |  __      [WORKBENCH]       ____      ,(^) |     ",
+            "     |  __      [====]       ____      ,(^) |     ",
             "     | |##|    .-----------.     |====|    <{#}>~|     ",
             "     | |##|    | * * * * * |     |====|     / \\  |     ",
             "    ===============================================    ",
-            "       |  ONLINE - LINE 04 HUMMING - KAEL PRESENT |    ",
+            "       |        [*]   ─────   [*]   ─────         |    ",
         ]
     } else {
         &[
             "       .---------------------------------------.       ",
-            "      /  [ ]   ABANDONED VIADUCT GANTRY   [ ]  \\      ",
+            "      /  [ ]   /=======\\   [ ]  \\      ",
             "     /===========================================\\     ",
-            "     |  __      [WORKBENCH]       ____       [ ] |     ",
+            "     |  __      [====]       ____       [ ] |     ",
             "     | |  |    .-----------.     |####|     .---.|     ",
             "     | |__|    | _ _ _ _ _ |     |####|     |   ||     ",
             "    ===============================================    ",
-            "       |       DORMANT - POWER OFFLINE       |         ",
+            "       |        [ ]   ─────   [ ]   ─────         |    ",
         ]
     };
 
@@ -126,7 +126,7 @@ pub fn render_refuge_panel(
     let kael_status = if is_restored || save_state.companion.kael_at_refuge {
         t("refuge_kael_present", locale)
     } else if save_state.companion.met_kael {
-        "Kael: Encountered at High Roost"
+        t("refuge_companion_met", locale)
     } else {
         t("refuge_kael_absent", locale)
     };
@@ -145,10 +145,32 @@ pub fn render_refuge_panel(
     let workbench_status = t("refuge_workbench_status", locale);
     buf.draw_str(px, y_info + 1, workbench_status, Color::White, bg);
 
-    let progress_summary = format!(
-        "Region Progress: Checkpoints Unlocked {}/5  |  Line Status: {}",
-        save_state.world_progress.checkpoints_unlocked.len().min(5),
-        if is_restored { "RESTORED" } else { "OFFLINE" }
+    let progress_summary = format_message(
+        "refuge_progress",
+        locale,
+        &[
+            (
+                "unlocked",
+                save_state
+                    .world_progress
+                    .checkpoints_unlocked
+                    .len()
+                    .min(5)
+                    .to_string(),
+            ),
+            (
+                "status",
+                t(
+                    if is_restored {
+                        "line_restored"
+                    } else {
+                        "line_dormant"
+                    },
+                    locale,
+                )
+                .to_owned(),
+            ),
+        ],
     );
     buf.draw_str_styled(
         px,
@@ -196,7 +218,6 @@ pub fn run_dashboard() -> io::Result<()> {
         let buf = engine.buffer_mut();
         buf.clear();
 
-        // 1. Draw outer frame
         let box_fg = if focus_panel {
             Color::Yellow
         } else {
@@ -221,19 +242,16 @@ pub fn run_dashboard() -> io::Result<()> {
         }
         buf.set_char(w.saturating_sub(1), h.saturating_sub(1), '╯', box_fg, bg);
 
-        // Header Title
         let header = format!("GALERNE v{}", crate::VERSION);
         let hx = (w.saturating_sub(header.len() as u16)) / 2;
         buf.draw_str_styled(hx, 0, &header, Style::new(Color::Yellow, bg).bold());
 
-        // Horizontal divider under header
         buf.set_char(0, 2, '├', box_fg, bg);
         for x in 1..w.saturating_sub(1) {
             buf.set_char(x, 2, '─', box_fg, bg);
         }
         buf.set_char(w.saturating_sub(1), 2, '┤', box_fg, bg);
 
-        // Vertical split at column 24
         let split_x = 24u16.min(w / 3);
         buf.set_char(split_x, 2, '┬', box_fg, bg);
         for y in 3..h.saturating_sub(3) {
@@ -241,14 +259,12 @@ pub fn run_dashboard() -> io::Result<()> {
         }
         buf.set_char(split_x, h.saturating_sub(3), '┴', box_fg, bg);
 
-        // Horizontal divider above footer
         buf.set_char(0, h.saturating_sub(3), '├', box_fg, bg);
         for x in 1..w.saturating_sub(1) {
             buf.set_char(x, h.saturating_sub(3), '─', box_fg, bg);
         }
         buf.set_char(w.saturating_sub(1), h.saturating_sub(3), '┤', box_fg, bg);
 
-        // Left Navigation Menu
         for (i, tab) in DashboardTab::ALL.iter().enumerate() {
             let row_y = 4 + (i as u16 * 2);
             let is_sel = i == current_idx;
@@ -275,7 +291,6 @@ pub fn run_dashboard() -> io::Result<()> {
             buf.draw_str_styled(3, row_y, &line, style);
         }
 
-        // Right Preview Panel
         let current_tab = DashboardTab::ALL[current_idx];
         let px = split_x + 3;
         let py = 4;
@@ -290,13 +305,16 @@ pub fn run_dashboard() -> io::Result<()> {
                 );
                 if let Some(ref run) = save_state.active_run {
                     buf.draw_str(px, py + 2, t("active_run_desc", locale), Color::White, bg);
-                    let info = format!(
-                        "Distance: {:.0}m  |  Speed: {:.0}  |  Score: {}  |  Shards: {}  |  Shields: {}",
-                        run.distance,
-                        run.speed,
-                        run.score,
-                        run.shards_collected,
-                        run.player_shields
+                    let info = format_message(
+                        "active_run_summary",
+                        locale,
+                        &[
+                            ("distance", format!("{:.0}", run.distance)),
+                            ("speed", format!("{:.0}", run.speed)),
+                            ("score", run.score.to_string()),
+                            ("shards", run.shards_collected.to_string()),
+                            ("shields", run.player_shields.to_string()),
+                        ],
                     );
                     buf.draw_str_styled(px, py + 3, &info, Style::new(Color::Cyan, bg).bold());
                     buf.draw_str(
@@ -307,10 +325,19 @@ pub fn run_dashboard() -> io::Result<()> {
                         bg,
                     );
                 } else {
-                    buf.draw_str(px, py + 2, "System Status: Idle", Color::White, bg);
-                    buf.draw_str(px, py + 3, t("controls_hint", locale), Color::DarkGrey, bg);
-                    let shards_str =
-                        format!("Gale Shards Available: {}", save_state.currency_shards);
+                    buf.draw_str(px, py + 2, t("system_idle", locale), Color::White, bg);
+                    buf.draw_str(
+                        px,
+                        py + 3,
+                        t("play_controls_hint", locale),
+                        Color::DarkGrey,
+                        bg,
+                    );
+                    let shards_str = format_message(
+                        "shards_available",
+                        locale,
+                        &[("count", save_state.currency_shards.to_string())],
+                    );
                     buf.draw_str_styled(
                         px,
                         py + 5,
@@ -377,10 +404,13 @@ pub fn run_dashboard() -> io::Result<()> {
                 }
             }
             DashboardTab::Workshop => {
-                let w_header = format!(
-                    "{} — {} SHARDS",
-                    t("workshop_title", locale),
-                    save_state.currency_shards
+                let w_header = format_message(
+                    "workshop_header",
+                    locale,
+                    &[
+                        ("title", t("workshop_title", locale).to_owned()),
+                        ("count", save_state.currency_shards.to_string()),
+                    ],
                 );
                 buf.draw_str_styled(px, py, &w_header, Style::new(Color::Yellow, bg).bold());
 
@@ -392,14 +422,23 @@ pub fn run_dashboard() -> io::Result<()> {
                     let cost_str = if lvl >= up_type.max_level() {
                         t("max_level", locale).to_string()
                     } else {
-                        format!("{} Shards", up_type.cost(lvl))
+                        format_message(
+                            "shard_cost",
+                            locale,
+                            &[("count", up_type.cost(lvl).to_string())],
+                        )
                     };
 
+                    let rank = format_message(
+                        "rank_value",
+                        locale,
+                        &[("rank", lvl.to_string()), ("max", "5".to_owned())],
+                    );
                     let line = format!(
-                        "{} {:<20} Rank {}/5  [{}]",
+                        "{} {:<20} {}  [{}]",
                         if is_sel { "▶" } else { " " },
                         t(up_type.title_key(), locale),
-                        lvl,
+                        rank,
                         cost_str
                     );
 
@@ -412,22 +451,16 @@ pub fn run_dashboard() -> io::Result<()> {
                     };
                     buf.draw_str_styled(px, y, &line, style);
                 }
-                buf.draw_str(
-                    px,
-                    py + 13,
-                    "↑/↓: select item   Enter: purchase rank   Tab/Esc: back to menu",
-                    Color::DarkGrey,
-                    bg,
-                );
+                buf.draw_str(px, py + 13, t("workshop_help", locale), Color::DarkGrey, bg);
             }
             DashboardTab::Stats => {
                 buf.draw_str_styled(
                     px,
                     py,
-                    "CAREER METRICS",
+                    t("stats_heading", locale),
                     Style::new(Color::Yellow, bg).bold(),
                 );
-                let stats_text = format_career_stats(&save_state);
+                let stats_text = format_career_stats(&save_state, locale);
                 for (line_idx, line) in stats_text.lines().enumerate() {
                     buf.draw_str(px, py + 2 + line_idx as u16, line, Color::White, bg);
                 }
@@ -436,40 +469,41 @@ pub fn run_dashboard() -> io::Result<()> {
                 buf.draw_str_styled(
                     px,
                     py,
-                    "SAVE & BACKUP INTEGRITY",
+                    t("saves_heading", locale),
                     Style::new(Color::Yellow, bg).bold(),
                 );
                 let save_path = save_manager.primary_save_path();
-                let p_str = format!("Path: {}", save_path.display());
+                let p_str = format_message(
+                    "path_label",
+                    locale,
+                    &[("path", save_path.display().to_string())],
+                );
                 buf.draw_str(px, py + 2, &p_str, Color::DarkGrey, bg);
 
                 let archives = save_manager.list_archives().unwrap_or_default();
 
+                if save_path.exists() {
+                    buf.draw_str(px, py + 4, t("save_verified", locale), Color::Green, bg);
+                } else {
+                    buf.draw_str(px, py + 4, t("save_missing", locale), Color::DarkYellow, bg);
+                }
+
                 if archives.is_empty() {
-                    buf.draw_str(
-                        px,
-                        py + 4,
-                        "Active Save: Present (CRC32 Verified)",
-                        Color::Green,
-                        bg,
-                    );
-                    buf.draw_str(
-                        px,
-                        py + 6,
-                        "No historical archives found. Use `galerne reset` to create an archive.",
-                        Color::DarkGrey,
-                        bg,
-                    );
+                    buf.draw_str(px, py + 6, t("archives_empty", locale), Color::DarkGrey, bg);
                 } else {
                     buf.draw_str_styled(
                         px,
-                        py + 4,
-                        &format!("Archived Snapshots ({} available):", archives.len()),
+                        py + 6,
+                        &format_message(
+                            "archives_count",
+                            locale,
+                            &[("count", archives.len().to_string())],
+                        ),
                         Style::new(Color::Cyan, bg),
                     );
 
                     for (idx, (name, size)) in archives.iter().take(5).enumerate() {
-                        let y = py + 6 + (idx as u16);
+                        let y = py + 8 + (idx as u16);
                         let is_sel = idx == saves_idx && focus_panel;
                         let line = format!(
                             "{} {:<28} ({} bytes)",
@@ -487,8 +521,8 @@ pub fn run_dashboard() -> io::Result<()> {
 
                     buf.draw_str(
                         px,
-                        py + 12,
-                        "Enter: restore selected archive   d: delete archive   Tab/Esc: back",
+                        py + 13,
+                        t("archives_controls", locale),
                         Color::DarkGrey,
                         bg,
                     );
@@ -498,7 +532,7 @@ pub fn run_dashboard() -> io::Result<()> {
                 buf.draw_str_styled(
                     px,
                     py,
-                    "SYSTEM DIAGNOSTICS (LIVE RUNTIME FINDINGS)",
+                    t("doctor_live_heading", locale),
                     Style::new(Color::Yellow, bg).bold(),
                 );
                 let diagnostics = collect_diagnostics();
@@ -513,8 +547,8 @@ pub fn run_dashboard() -> io::Result<()> {
                     let text = format!(
                         "[{}] {:<18} {}",
                         symbol,
-                        format!("{}:", diag.label),
-                        diag.status
+                        format!("{}:", diag.label(locale)),
+                        diag.status(locale)
                     );
                     buf.draw_str_styled(px, y, &text, Style::new(color, bg));
                 }
@@ -529,50 +563,47 @@ pub fn run_dashboard() -> io::Result<()> {
                 let s = &save_state.settings;
 
                 let lang_val = match s.locale {
-                    None => "Auto (System)",
-                    Some(Locale::En) => "English",
-                    Some(Locale::Fr) => "Français",
-                    Some(Locale::Es) => "Español",
-                    Some(Locale::ZhCn) => "简体中文",
+                    None => t("language_auto", locale),
+                    Some(value) => value.name(),
                 };
 
                 let settings_rows = [
                     (
                         t("color_effects", locale),
                         if s.color_enabled {
-                            "Enabled"
+                            t("setting_enabled", locale)
                         } else {
-                            "Disabled"
+                            t("setting_disabled", locale)
                         },
-                        "[Enter/Space]: toggle",
+                        t("setting_toggle_hint", locale),
                     ),
                     (
                         t("animations", locale),
                         if s.animations_enabled {
-                            "Enabled"
+                            t("setting_enabled", locale)
                         } else {
-                            "Disabled"
+                            t("setting_disabled", locale)
                         },
-                        "[Enter/Space]: toggle",
+                        t("setting_toggle_hint", locale),
                     ),
                     (
                         t("auto_activate", locale),
                         if s.auto_activate {
-                            "Enabled"
+                            t("setting_enabled", locale)
                         } else {
-                            "Disabled"
+                            t("setting_disabled", locale)
                         },
-                        "[Enter/Space]: toggle",
+                        t("setting_toggle_hint", locale),
                     ),
                     (
                         t("anti_flicker_delay", locale),
                         &format!("{} ms", s.anti_flicker_delay_ms),
-                        "[Enter/Space/←/→]: cycle duration",
+                        t("setting_delay_hint", locale),
                     ),
                     (
                         t("language", locale),
                         lang_val,
-                        "[Enter/Space/←/→]: cycle language",
+                        t("setting_language_hint", locale),
                     ),
                 ];
 
@@ -598,78 +629,47 @@ pub fn run_dashboard() -> io::Result<()> {
                     buf.draw_str_styled(px, y, &line, style);
                 }
 
-                buf.draw_str(
-                    px,
-                    py + 13,
-                    "↑/↓: navigate   Enter/Space/←/→: change setting   Tab/Esc: back to menu",
-                    Color::DarkGrey,
-                    bg,
-                );
+                buf.draw_str(px, py + 13, t("footer_panel", locale), Color::DarkGrey, bg);
             }
             DashboardTab::Help => {
                 buf.draw_str_styled(
                     px,
                     py,
-                    "CONTROLS & HOW IT WORKS",
+                    t("help_heading", locale),
                     Style::new(Color::Yellow, bg).bold(),
                 );
-                buf.draw_str(px, py + 2, "Controls during combat:", Color::White, bg);
-                buf.draw_str(
-                    px,
-                    py + 3,
-                    "  Arrows or WASD : Move & Dodge",
-                    Color::Cyan,
-                    bg,
-                );
-                buf.draw_str(
-                    px,
-                    py + 4,
-                    "  Automatic      : Gale Blaster auto-fires at nearest foes",
-                    Color::Cyan,
-                    bg,
-                );
-                buf.draw_str(
-                    px,
-                    py + 5,
-                    "  Ctrl+C / Esc   : Suspend gameplay and return instantly",
-                    Color::Cyan,
-                    bg,
-                );
-                buf.draw_str(
-                    px,
-                    py + 7,
-                    "During development tasks (cargo build, npm install...):",
-                    Color::White,
-                    bg,
-                );
+                buf.draw_str(px, py + 2, t("help_jump", locale), Color::Cyan, bg);
+                buf.draw_str(px, py + 3, t("help_slide", locale), Color::Cyan, bg);
+                buf.draw_str(px, py + 4, t("help_dash", locale), Color::Cyan, bg);
+                buf.draw_str(px, py + 5, t("help_wind", locale), Color::Cyan, bg);
+                buf.draw_str(px, py + 6, t("help_leave", locale), Color::Cyan, bg);
                 buf.draw_str(
                     px,
                     py + 8,
-                    "  Galerne appears for long tasks (~150ms for known long, ~8s fallback).",
-                    Color::DarkGrey,
+                    t("help_tasks_heading", locale),
+                    Color::White,
                     bg,
                 );
                 buf.draw_str(
                     px,
                     py + 9,
-                    "  Pressing Ctrl+C leaves the game without killing your build!",
+                    t("help_activation", locale),
                     Color::DarkGrey,
                     bg,
                 );
+                buf.draw_str(px, py + 10, t("help_continue", locale), Color::DarkGrey, bg);
             }
             DashboardTab::Exit => {
-                buf.draw_str_styled(px, py, "EXIT GALERNE", Style::new(Color::Red, bg).bold());
-                buf.draw_str(
+                buf.draw_str_styled(
                     px,
-                    py + 2,
-                    "Press Enter to return to your shell prompt.",
-                    Color::White,
-                    bg,
+                    py,
+                    t("exit_heading", locale),
+                    Style::new(Color::Red, bg).bold(),
                 );
+                buf.draw_str(px, py + 2, t("exit_prompt", locale), Color::White, bg);
             }
         }
 
-        // Temporary status message banner
         if let Some((ref msg, time)) = status_banner {
             if time.elapsed() < Duration::from_secs(4) {
                 buf.draw_str_styled(
@@ -681,11 +681,10 @@ pub fn run_dashboard() -> io::Result<()> {
             }
         }
 
-        // Footer instructions
         let footer = if focus_panel {
-            "↑/↓: navigate item   Enter: action   Tab/Esc: back to menu   Ctrl+C/q: exit"
+            t("footer_panel", locale)
         } else {
-            "↑/↓: navigate menu   Tab/Enter: enter panel   Esc/q: exit"
+            t("footer_menu", locale)
         };
         buf.draw_str_styled(
             3,
@@ -696,7 +695,6 @@ pub fn run_dashboard() -> io::Result<()> {
 
         engine.flush()?;
 
-        // Handle Dashboard Inputs
         if let Some(ev) = Engine::poll_event(Duration::from_millis(100))? {
             match ev {
                 Event::Key(k) if k.code == KeyCode::Char('q') && !focus_panel => {
@@ -782,8 +780,14 @@ pub fn run_dashboard() -> io::Result<()> {
                         if focus_panel && current_tab == DashboardTab::Settings {
                             toggle_or_adjust_setting(&mut save_state, settings_idx, -1);
                             if let Err(e) = save_manager.save(&save_state) {
-                                status_banner =
-                                    Some((format!("Error saving: {}", e), Instant::now()));
+                                status_banner = Some((
+                                    format_message(
+                                        "save_error",
+                                        locale,
+                                        &[("error", e.to_string())],
+                                    ),
+                                    Instant::now(),
+                                ));
                             }
                         } else {
                             focus_panel = false;
@@ -793,8 +797,14 @@ pub fn run_dashboard() -> io::Result<()> {
                         if focus_panel && current_tab == DashboardTab::Settings {
                             toggle_or_adjust_setting(&mut save_state, settings_idx, 1);
                             if let Err(e) = save_manager.save(&save_state) {
-                                status_banner =
-                                    Some((format!("Error saving: {}", e), Instant::now()));
+                                status_banner = Some((
+                                    format_message(
+                                        "save_error",
+                                        locale,
+                                        &[("error", e.to_string())],
+                                    ),
+                                    Instant::now(),
+                                ));
                             }
                         } else {
                             focus_panel = true;
@@ -804,8 +814,14 @@ pub fn run_dashboard() -> io::Result<()> {
                         if focus_panel && current_tab == DashboardTab::Settings {
                             toggle_or_adjust_setting(&mut save_state, settings_idx, 1);
                             if let Err(e) = save_manager.save(&save_state) {
-                                status_banner =
-                                    Some((format!("Error saving: {}", e), Instant::now()));
+                                status_banner = Some((
+                                    format_message(
+                                        "save_error",
+                                        locale,
+                                        &[("error", e.to_string())],
+                                    ),
+                                    Instant::now(),
+                                ));
                             }
                         }
                     }
@@ -817,7 +833,11 @@ pub fn run_dashboard() -> io::Result<()> {
                                 let path = save_manager.data_dir().join(name);
                                 if fs::remove_file(path).is_ok() {
                                     status_banner = Some((
-                                        format!("✓ Deleted archive {}", name),
+                                        format_message(
+                                            "archive_deleted",
+                                            locale,
+                                            &[("name", name.clone())],
+                                        ),
                                         Instant::now(),
                                     ));
                                     saves_idx = saves_idx.saturating_sub(1);
@@ -848,18 +868,29 @@ pub fn run_dashboard() -> io::Result<()> {
                                     if purchase_workshop_upgrade(&mut save_state, target) {
                                         if let Err(e) = save_manager.save(&save_state) {
                                             status_banner = Some((
-                                                format!("Error saving: {}", e),
+                                                format_message(
+                                                    "save_error",
+                                                    locale,
+                                                    &[("error", e.to_string())],
+                                                ),
                                                 Instant::now(),
                                             ));
                                         } else {
                                             status_banner = Some((
-                                                format!("✓ Purchased rank for {}", target.title()),
+                                                format_message(
+                                                    "upgrade_purchased",
+                                                    locale,
+                                                    &[(
+                                                        "upgrade",
+                                                        t(target.title_key(), locale).to_owned(),
+                                                    )],
+                                                ),
                                                 Instant::now(),
                                             ));
                                         }
                                     } else {
                                         status_banner = Some((
-                                            "Not enough Gale Shards!".to_string(),
+                                            t("shards_insufficient", locale).to_owned(),
                                             Instant::now(),
                                         ));
                                     }
@@ -867,8 +898,14 @@ pub fn run_dashboard() -> io::Result<()> {
                                 DashboardTab::Settings => {
                                     toggle_or_adjust_setting(&mut save_state, settings_idx, 1);
                                     if let Err(e) = save_manager.save(&save_state) {
-                                        status_banner =
-                                            Some((format!("Error saving: {}", e), Instant::now()));
+                                        status_banner = Some((
+                                            format_message(
+                                                "save_error",
+                                                locale,
+                                                &[("error", e.to_string())],
+                                            ),
+                                            Instant::now(),
+                                        ));
                                     }
                                 }
                                 DashboardTab::Saves => {
@@ -879,13 +916,21 @@ pub fn run_dashboard() -> io::Result<()> {
                                             Ok(_) => {
                                                 save_state = save_manager.load_or_default()?;
                                                 status_banner = Some((
-                                                    format!("✓ Restored {} successfully", name),
+                                                    format_message(
+                                                        "archive_restored",
+                                                        locale,
+                                                        &[("name", name.clone())],
+                                                    ),
                                                     Instant::now(),
                                                 ));
                                             }
                                             Err(e) => {
                                                 status_banner = Some((
-                                                    format!("Failed to restore: {}", e),
+                                                    format_message(
+                                                        "archive_restore_failed",
+                                                        locale,
+                                                        &[("error", e.to_string())],
+                                                    ),
                                                     Instant::now(),
                                                 ));
                                             }
@@ -1047,6 +1092,7 @@ pub fn run_manual_game(
         engine.height() as usize,
         rand_seed(),
     );
+    game.set_locale(locale);
     apply_workshop_to_runner(&save_state.workshop, &mut game);
 
     if let Some(ref snapshot) = save_state.active_run {
@@ -1066,7 +1112,6 @@ pub fn run_manual_game(
         while let Some(ev) = Engine::poll_event(Duration::from_millis(0))? {
             match ev {
                 Event::Key(k) if k.code == KeyCode::Esc || k.code == KeyCode::Char('q') => {
-                    // Save and exit back to menu
                     save_state.total_play_time_secs += start.elapsed().as_secs();
                     sync_game_to_save_state(&game, save_state, initial_shards, initial_dist);
                     if game.is_game_over {

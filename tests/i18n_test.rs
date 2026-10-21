@@ -1,4 +1,6 @@
-use galerne::ui::i18n::{t, Locale, ALL_KEYS, ALL_LOCALES};
+use galerne::storage::schema::SaveState;
+use galerne::storage::stats::format_career_stats;
+use galerne::ui::i18n::{has_translation, t, Locale, ALL_KEYS, ALL_LOCALES};
 
 #[test]
 fn test_locale_from_code_and_as_code() {
@@ -26,6 +28,12 @@ fn test_all_keys_translated_in_all_locales() {
         );
 
         for &locale in ALL_LOCALES {
+            assert!(
+                has_translation(key, locale),
+                "Translation table is missing '{}' in locale {:?}",
+                key,
+                locale
+            );
             let val = t(key, locale);
             assert!(
                 !val.is_empty(),
@@ -39,6 +47,50 @@ fn test_all_keys_translated_in_all_locales() {
                 key, locale
             );
         }
+    }
+}
+
+#[test]
+fn test_career_stats_use_selected_locale() {
+    let state = SaveState::default();
+    let french = format_career_stats(&state, Locale::Fr);
+    let spanish = format_career_stats(&state, Locale::Es);
+    let chinese = format_career_stats(&state, Locale::ZhCn);
+
+    assert!(french.contains("Temps passé dans le jeu"));
+    assert!(spanish.contains("Tiempo en el juego"));
+    assert!(chinese.contains("游戏时间"));
+    assert!(!french.contains("Total Game Time"));
+    assert!(!spanish.contains("Total Game Time"));
+    assert!(!chinese.contains("Total Game Time"));
+}
+
+#[test]
+fn test_checkpoint_event_uses_game_locale() {
+    for &locale in ALL_LOCALES {
+        let mut game = galerne::game::runner::state::RunnerState::new(120, 30, 0x1234_5678);
+        game.set_locale(locale);
+
+        for _ in 0..600 {
+            game.player.invulnerable_timer = 10.0;
+            game.update(0.033, None);
+            if game.last_checkpoint_id == 1 {
+                break;
+            }
+        }
+
+        let expected = galerne::ui::i18n::format_message(
+            "checkpoint_message",
+            locale,
+            &[("name", t("cp_shanty_outpost", locale).to_owned())],
+        );
+        assert!(
+            game.floating_indicators
+                .iter()
+                .any(|indicator| indicator.text == expected),
+            "checkpoint message must use locale {:?}",
+            locale
+        );
     }
 }
 
