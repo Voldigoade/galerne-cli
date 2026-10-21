@@ -74,11 +74,18 @@ fn test_non_blocking_try_wait() {
     let poll1 = supervisor.try_wait().expect("poll");
     assert!(poll1.is_none(), "Process should still be running");
 
-    std::thread::sleep(Duration::from_millis(150));
-
-    let poll2 = supervisor.try_wait().expect("poll");
-    assert!(poll2.is_some(), "Process should have exited");
-    assert!(poll2.unwrap().success());
+    // Wait until process exits with a 3-second timeout to accommodate VM scheduling variance
+    let start = std::time::Instant::now();
+    let mut exited = false;
+    while start.elapsed() < Duration::from_secs(3) {
+        if let Some(status) = supervisor.try_wait().expect("poll") {
+            assert!(status.success());
+            exited = true;
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    assert!(exited, "Process should have exited within timeout");
 }
 
 #[test]
