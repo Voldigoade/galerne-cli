@@ -61,6 +61,20 @@ fn test_slide_clears_overhead_pipe() {
 }
 
 #[test]
+fn overhead_pipe_art_matches_its_traversal_span() {
+    let pipe = Obstacle::new(10.0, 18.0, ObstacleKind::OverheadPipe);
+    let sprite = pipe.sprite();
+
+    assert_eq!(pipe.width(), 8);
+    assert_eq!(pipe.height(), 4);
+    assert_eq!(sprite.len(), pipe.height());
+    assert!(sprite
+        .iter()
+        .all(|line| line.chars().count() == pipe.width()));
+    assert!(sprite.join("\n").contains("[o]"));
+}
+
+#[test]
 fn test_instant_pickup_collection_without_blocking() {
     let ground_y = 18.0;
     let player = RunnerPlayer::new(10.0, ground_y);

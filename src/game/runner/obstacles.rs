@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 pub enum ObstacleKind {
     /// Low hurdle or rubble (2 rows high on ground): must JUMP over.
     LowBarrier,
-    /// High overhead conduit or steam pipe (hangs 2-3 rows above ground): must SLIDE under.
+    /// Suspended conduit across the lower route: must SLIDE under.
     OverheadPipe,
     /// Tall pylon or antenna (4 rows high): requires high jump or dash timing.
     Pylon,
@@ -34,7 +34,7 @@ impl Obstacle {
     pub fn width(&self) -> usize {
         match self.kind {
             ObstacleKind::LowBarrier => 4,
-            ObstacleKind::OverheadPipe => 7,
+            ObstacleKind::OverheadPipe => 8,
             ObstacleKind::Pylon => 4,
         }
     }
@@ -42,7 +42,7 @@ impl Obstacle {
     pub fn height(&self) -> usize {
         match self.kind {
             ObstacleKind::LowBarrier => 2,
-            ObstacleKind::OverheadPipe => 2,
+            ObstacleKind::OverheadPipe => 4,
             ObstacleKind::Pylon => 4,
         }
     }
@@ -70,7 +70,7 @@ impl Obstacle {
     pub fn sprite(&self) -> &'static [&'static str] {
         match self.kind {
             ObstacleKind::LowBarrier => &[" /\\ ", "[##]"],
-            ObstacleKind::OverheadPipe => &["[====:]", "~~::~:~"],
+            ObstacleKind::OverheadPipe => &["| |  | |", "|_|__|_|", "|=[o]==|", r"|_\==/_|"],
             ObstacleKind::Pylon => &[" /\\ ", "/||\\", "+==+", "|  |"],
         }
     }
