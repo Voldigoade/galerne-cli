@@ -4,7 +4,29 @@ use serde::{Deserialize, Serialize};
 
 use crate::terminal::buffer::{Buffer, Color};
 
-const SCENE_WIDTH: i32 = 420;
+#[derive(Clone, Copy)]
+struct ScenicArt {
+    x: i32,
+    full: &'static [&'static str],
+    compact: &'static [&'static str],
+    color: Color,
+}
+
+impl ScenicArt {
+    const fn new(
+        x: i32,
+        full: &'static [&'static str],
+        compact: &'static [&'static str],
+        color: Color,
+    ) -> Self {
+        Self {
+            x,
+            full,
+            compact,
+            color,
+        }
+    }
+}
 
 const ARCH_TALL: &[&str] = &[
     r"                                  .",
@@ -134,6 +156,161 @@ const WISP_A: &[&str] = &[r"      ~~~~~~~\_                    ."];
 const WISP_B: &[&str] = &[r"                 .       ~~~~~~~~~~"];
 const VINES: &[&str] = &[r"  v    /\     v       /\    v   /\"];
 
+const CABLE_BRIDGE: &[&str] = &[
+    r"                                  .",
+    r"                    ___..----..___",
+    r"       _______.----'      ||      `----._______",
+    r"  ____/       ||          ||          ||       \____",
+    r" /____________||__________||__________||____________\",
+    r"        |      ||     ___/||\___      ||      |",
+    r"    ____|______||____|   ||||   |_____||______|____",
+    r"   |  []   []  ||    | [] || [] |     ||  []   []  |",
+    r"   |__________||____|____|__|____|____||__________|",
+    r"       ||      ||       ||  ||       ||      ||",
+    r"   v   || /\   ||   v   ||  ||   /\  ||  v   ||",
+    r"___||__/  \___||__/ \___||__||__/  \_||_____||_____",
+];
+
+const CABLE_BRIDGE_COMPACT: &[&str] = &[
+    r"      ___..----..___",
+    r" ____/   ||    ||   \____",
+    r"|_______ ||____|| _______|",
+    r"  []  |__||_[]_||__|  []",
+    r"  ||    ||  ||  ||    ||",
+    r"_v||__/  \_||_/  \__||v_",
+];
+
+const ROOTED_HOMES: &[&str] = &[
+    r"       v          .----.              v",
+    r"  ____/ \_____.--' []  `--.____    ___/ \__",
+    r" |  []    []  |____    ____|  |___| []   [] |",
+    r" |____________| [] |__| [] |__|   |_________|",
+    r"      ||       |___|  |___|       ||",
+    r"  v   ||   /\   ||    ||   /\     ||   v",
+    r"__||__||__/  \__||____||__/  \____||___||____",
+    r"  ||      ||       ||       ||        ||",
+    r"~~~~~   ~~~~~~   ~~~~~~   ~~~~~~   ~~~~~~~~",
+];
+
+const ROOTED_HOMES_COMPACT: &[&str] = &[
+    r"  v    .----.      /\",
+    r" ___..' []  `.___|[]|__",
+    r"| [] |_____| [] |___|[]|",
+    r"  ||   /\  ||  /\  ||",
+    r"_v||__/  \_||_/  \_||v_",
+    r"~~~~~   ~~~~~~   ~~~~~~",
+];
+
+const ROOF_GARDEN: &[&str] = &[
+    r"        /\       v     .       /\",
+    r"   ____/  \_____/ \____/ \_____/  \___",
+    r"  | []  []  []  | []  []  []  []  []  |",
+    r"  |_____________|_____________________|",
+    r"      ||     ||     ||       ||",
+    r"  v   || /\  ||  v  ||  /\   ||   v",
+    r"__||__||/  \_||_____||_/  \__||___||___",
+    r"  ||       ||      ||      ||",
+    r"~~~~~~   ~~~~~~  ~~~~~~~  ~~~~~~~~",
+];
+
+const ROOF_GARDEN_COMPACT: &[&str] = &[
+    r"   /\    v     /\",
+    r"__/  \__/ \___/  \__",
+    r"| []  [] | []  []  |",
+    r"|________|_________|",
+    r"  ||  /\  ||  /\ ||",
+    r"_v||_/  \_||_/  \||v_",
+];
+
+const WATER_STATION: &[&str] = &[
+    r"                 .",
+    r"       _________/|\_________",
+    r"  ____/     []   |   []      \____",
+    r" |____  ________ | ________  _____|",
+    r"      ||  []   |___|   []  ||",
+    r"  ____||_______|   |_______||____",
+    r" |  []   []  |  ___  |  []   []  |",
+    r" |__________|_|___|_|___________|",
+    r"      ||       || ||       ||",
+    r"  v   ||  /\   || ||  /\   ||  v",
+    r"__||__||_/  \__||_||_/  \__||__||___",
+    r"~~~~~~    ~~~~~~~    ~~~~~~~    ~~~~~",
+];
+
+const WATER_STATION_COMPACT: &[&str] = &[
+    r"       .   /|\",
+    r"  ____/ [] | [] \____",
+    r" |____|____|____|____|",
+    r"   ||  |___|  ||",
+    r"_v_||_/  \_||_\_||v_",
+    r"~~~~~   ~~~~~   ~~~~~",
+];
+
+const HANGING_GARDEN: &[&str] = &[
+    r"          v       .--------------------.        v",
+    r"     _____/ \_____| [] [] [] [] [] []   |______/ \___",
+    r"    |   []    []  |____________________|  []     []  |",
+    r"    |_____________|    _    _    _    _|____________|",
+    r"         ||     |___| |[]| |[]| |[]| |___|     ||",
+    r"    v    || /\   ||   ||   ||   ||   ||   /\  ||   v",
+    r" ___||___||/  \__||___||___||___||___||__/  \_||___||___",
+    r"       ||       ||       ||       ||       ||",
+    r" ~~~~~~~   ~~~~~~~~   ~~~~~~~~   ~~~~~~~~~~",
+];
+
+const HANGING_GARDEN_COMPACT: &[&str] = &[
+    r"    v   .-----------.   v",
+    r" ___/\__| [] [] []  |__/\___",
+    r"|________|__________|________|",
+    r"   ||   |[]| || |[]|   ||",
+    r"_v_||__/  \_||_/  \__||_||v_",
+    r"~~~~~   ~~~~~~   ~~~~~~",
+];
+
+const DISTANT_SPAN: &[&str] = &[
+    r"                                .",
+    r"                __..---..___.-'|`-.__",
+    r"       ______.-'       ||         `-.______",
+    r"  ____/                 ||                  \____",
+    r"_/_____________________||______________________\_",
+    r"                        ||",
+    r"                    ____||____",
+    r"                   |____[]____|",
+    r"                       ||",
+    r"                 ______||______",
+];
+
+const DISTANT_SPAN_COMPACT: &[&str] = &[
+    r"         __..---..__",
+    r"   ____-'     ||    `-____",
+    r"__/__________||__________\__",
+    r"              ||",
+    r"           ___||___",
+    r"          |___[]___|",
+];
+
+const HIGH_TOWER: &[&str] = &[
+    r"                               /\",
+    r"                              /||\",
+    r"                       _____/_||_\_____",
+    r"              ________/       ||       \________",
+    r"         ____/                 ||                 \____",
+    r"   _____/_____________________||_____________________\_____",
+    r"                              _||_",
+    r"                             | [] |",
+    r"                             |____|",
+    r"                               ||",
+];
+
+const HIGH_TOWER_COMPACT: &[&str] = &[
+    r"          /\",
+    r"      ___/||\___",
+    r"   __/    ||    \__",
+    r"  /_______||_______\",
+    r"         |[]|",
+    r"          ||",
+];
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ParallaxEngine {
     pub sky_offset: f32,
@@ -189,82 +366,125 @@ impl ParallaxEngine {
             Color::DarkGrey,
             false,
         );
-
-        let far_art = if far_end.saturating_sub(far_start) >= ARCH_TALL.len() {
-            ARCH_TALL
-        } else {
-            ARCH_COMPACT
-        };
         draw_scene_art(
             buf,
-            self.far_offset,
-            -8,
-            (far_end.saturating_sub(far_art.len())) as i32,
-            far_art,
+            self.sky_offset,
+            500,
+            3.min(ground_y.saturating_sub(4)) as i32,
+            WISP_A,
             Color::DarkGrey,
+            false,
+        );
+
+        let far_band_height = far_end.saturating_sub(far_start);
+        // Each layer is a one-pass authored panorama, so these are layer positions, not world coordinates.
+        draw_band_art(
+            buf,
+            self.far_offset,
+            far_end,
+            far_band_height,
+            ScenicArt::new(-8, ARCH_TALL, ARCH_COMPACT, Color::DarkGrey),
             relay_restored,
         );
-        let tower_art = if far_end.saturating_sub(far_start) >= ARRAY_TOWER.len() {
-            ARRAY_TOWER
-        } else {
-            ARRAY_TOWER_COMPACT
-        };
         let tower_x = if width >= 120 { 150 } else { 52 };
-        draw_scene_art(
+        draw_band_art(
             buf,
             self.far_offset,
-            tower_x,
-            (far_end.saturating_sub(tower_art.len())) as i32,
-            tower_art,
-            Color::DarkGrey,
+            far_end,
+            far_band_height,
+            ScenicArt::new(tower_x, ARRAY_TOWER, ARRAY_TOWER_COMPACT, Color::DarkGrey),
+            relay_restored,
+        );
+        draw_band_art(
+            buf,
+            self.far_offset,
+            far_end,
+            far_band_height,
+            ScenicArt::new(220, CABLE_BRIDGE, CABLE_BRIDGE_COMPACT, Color::DarkGrey),
+            relay_restored,
+        );
+        draw_band_art(
+            buf,
+            self.far_offset,
+            far_end,
+            far_band_height,
+            ScenicArt::new(720, HIGH_TOWER, HIGH_TOWER_COMPACT, Color::DarkGrey),
+            relay_restored,
+        );
+        draw_band_art(
+            buf,
+            self.far_offset,
+            far_end,
+            far_band_height,
+            ScenicArt::new(1080, DISTANT_SPAN, DISTANT_SPAN_COMPACT, Color::DarkGrey),
             relay_restored,
         );
         if relay_restored {
             let tram_x = 18 + (self.far_offset * 0.4) as i32 % 88;
-            draw_returning_tram(
-                buf,
-                self.far_offset,
-                tram_x,
-                far_end.saturating_sub(6) as i32,
-            );
+            draw_returning_tram(buf, tram_x, far_end.saturating_sub(6) as i32);
         }
 
-        let settlement = if mid_end.saturating_sub(mid_start) >= SETTLEMENT_LEFT.len() {
-            SETTLEMENT_LEFT
-        } else {
-            SETTLEMENT_COMPACT
-        };
-        draw_scene_art(
+        let mid_band_height = mid_end.saturating_sub(mid_start);
+        draw_band_art(
             buf,
             self.mid_offset,
-            -6,
-            (mid_end.saturating_sub(settlement.len())) as i32,
-            settlement,
-            Color::DarkGrey,
+            mid_end,
+            mid_band_height,
+            ScenicArt::new(-6, SETTLEMENT_LEFT, SETTLEMENT_COMPACT, Color::DarkGrey),
             relay_restored,
         );
-        draw_scene_art(
+        draw_band_art(
             buf,
             self.mid_offset,
-            148,
-            (mid_end.saturating_sub(SETTLEMENT_RIGHT.len())) as i32,
-            SETTLEMENT_RIGHT,
-            Color::DarkGrey,
+            mid_end,
+            mid_band_height,
+            ScenicArt::new(148, SETTLEMENT_RIGHT, SETTLEMENT_COMPACT, Color::DarkGrey),
             relay_restored,
         );
         let center_x = if width >= 120 { 64 } else { 42 };
-        let hanging_homes = if mid_end.saturating_sub(mid_start) >= HANGING_HOMES.len() {
-            HANGING_HOMES
-        } else {
-            HANGING_HOMES_COMPACT
-        };
-        draw_scene_art(
+        draw_band_art(
             buf,
             self.mid_offset,
-            center_x,
-            (mid_end.saturating_sub(hanging_homes.len())) as i32,
-            hanging_homes,
-            Color::DarkGrey,
+            mid_end,
+            mid_band_height,
+            ScenicArt::new(
+                center_x,
+                HANGING_HOMES,
+                HANGING_HOMES_COMPACT,
+                Color::DarkGrey,
+            ),
+            relay_restored,
+        );
+        draw_band_art(
+            buf,
+            self.mid_offset,
+            mid_end,
+            mid_band_height,
+            ScenicArt::new(420, ROOTED_HOMES, ROOTED_HOMES_COMPACT, Color::DarkGrey),
+            relay_restored,
+        );
+        draw_band_art(
+            buf,
+            self.mid_offset,
+            mid_end,
+            mid_band_height,
+            ScenicArt::new(660, ROOF_GARDEN, ROOF_GARDEN_COMPACT, Color::DarkGrey),
+            relay_restored,
+        );
+        draw_band_art(
+            buf,
+            self.mid_offset,
+            mid_end,
+            mid_band_height,
+            ScenicArt::new(540, WATER_STATION, WATER_STATION_COMPACT, Color::DarkGrey),
+            relay_restored,
+        );
+        draw_band_art(
+            buf,
+            self.mid_offset,
+            mid_end,
+            mid_band_height,
+            ScenicArt::new(780, HANGING_GARDEN, HANGING_GARDEN_COMPACT, Color::DarkGrey),
             relay_restored,
         );
         draw_scene_art(
@@ -337,6 +557,30 @@ impl ParallaxEngine {
     }
 }
 
+fn draw_band_art(
+    buf: &mut Buffer,
+    offset: f32,
+    band_end: usize,
+    band_height: usize,
+    art: ScenicArt,
+    relay_restored: bool,
+) {
+    let lines = if band_height >= art.full.len() {
+        art.full
+    } else {
+        art.compact
+    };
+    draw_scene_art(
+        buf,
+        offset,
+        art.x,
+        band_end.saturating_sub(lines.len()) as i32,
+        lines,
+        art.color,
+        relay_restored,
+    );
+}
+
 fn draw_scene_art(
     buf: &mut Buffer,
     offset: f32,
@@ -346,62 +590,55 @@ fn draw_scene_art(
     base_color: Color,
     relay_restored: bool,
 ) {
-    let phase = offset.rem_euclid(SCENE_WIDTH as f32) as i32;
+    let start_x = art_x - offset as i32;
     let width = buf.width() as i32;
 
-    for cycle in [-SCENE_WIDTH, 0, SCENE_WIDTH] {
-        let start_x = art_x + cycle - phase;
-        for (row, line) in art.iter().enumerate() {
-            let y = art_y + row as i32;
-            if !(0..buf.height() as i32).contains(&y) {
+    for (row, line) in art.iter().enumerate() {
+        let y = art_y + row as i32;
+        if !(0..buf.height() as i32).contains(&y) {
+            continue;
+        }
+        for (column, glyph) in line.chars().enumerate() {
+            let x = start_x + column as i32;
+            if !(0..width).contains(&x) {
                 continue;
             }
-            for (column, glyph) in line.chars().enumerate() {
-                let x = start_x + column as i32;
-                if !(0..width).contains(&x) {
-                    continue;
-                }
-                if glyph == ' ' {
-                    continue;
-                }
-                let color = match glyph {
-                    '#' | 'v' | '^' => Color::DarkGreen,
-                    '[' | ']' if base_color == Color::DarkGrey => Color::Yellow,
-                    '=' | '+' | '|' if relay_restored => Color::DarkCyan,
-                    _ => base_color,
-                };
-                buf.set_char(x as u16, y as u16, glyph, color, Color::Black);
+            if glyph == ' ' {
+                continue;
             }
+            let color = match glyph {
+                '#' | 'v' | '^' => Color::DarkGreen,
+                '~' => Color::DarkCyan,
+                '[' | ']' if base_color == Color::DarkGrey => Color::Yellow,
+                '=' | '+' | '|' if relay_restored => Color::DarkCyan,
+                _ => base_color,
+            };
+            buf.set_char(x as u16, y as u16, glyph, color, Color::Black);
         }
     }
 }
 
-fn draw_returning_tram(buf: &mut Buffer, offset: f32, art_x: i32, art_y: i32) {
-    let phase = offset.rem_euclid(SCENE_WIDTH as f32) as i32;
-
-    for cycle in [-SCENE_WIDTH, 0, SCENE_WIDTH] {
-        let start_x = art_x + cycle - phase;
-        for (row, line) in RETURNING_TRAM.iter().enumerate() {
-            let y = art_y + row as i32;
-            if !(0..buf.height() as i32).contains(&y) {
+fn draw_returning_tram(buf: &mut Buffer, start_x: i32, art_y: i32) {
+    for (row, line) in RETURNING_TRAM.iter().enumerate() {
+        let y = art_y + row as i32;
+        if !(0..buf.height() as i32).contains(&y) {
+            continue;
+        }
+        for (column, glyph) in line.chars().enumerate() {
+            let x = start_x + column as i32;
+            if !(0..buf.width() as i32).contains(&x) {
                 continue;
             }
-            for (column, glyph) in line.chars().enumerate() {
-                let x = start_x + column as i32;
-                if !(0..buf.width() as i32).contains(&x) {
-                    continue;
-                }
-                if glyph == ' ' {
-                    buf.set_char(x as u16, y as u16, ' ', Color::Reset, Color::Black);
-                    continue;
-                }
-                let color = match glyph {
-                    '[' | ']' => Color::Yellow,
-                    '=' | '|' => Color::DarkCyan,
-                    _ => Color::DarkGrey,
-                };
-                buf.set_char(x as u16, y as u16, glyph, color, Color::Black);
+            if glyph == ' ' {
+                buf.set_char(x as u16, y as u16, ' ', Color::Reset, Color::Black);
+                continue;
             }
+            let color = match glyph {
+                '[' | ']' => Color::Yellow,
+                '=' | '|' => Color::DarkCyan,
+                _ => Color::DarkGrey,
+            };
+            buf.set_char(x as u16, y as u16, glyph, color, Color::Black);
         }
     }
 }

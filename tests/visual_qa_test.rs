@@ -52,6 +52,54 @@ fn restored_line_resumes_the_suspended_tram() {
 }
 
 #[test]
+fn authored_midground_changes_across_the_first_journey() {
+    let mut panorama = ParallaxEngine::default();
+    let mut opening = Buffer::new(236, 53);
+    panorama.render_backdrop(&mut opening, 48, false);
+
+    panorama.update(933.3333);
+    panorama.mid_offset = 420.0;
+    let mut later = Buffer::new(236, 53);
+    panorama.render_backdrop(&mut later, 48, false);
+
+    let midground_rows = 29..47;
+    let opening_midground: Vec<_> = midground_rows
+        .clone()
+        .map(|y| {
+            (0..opening.width())
+                .map(|x| opening.get(x, y).unwrap().ch)
+                .collect::<String>()
+        })
+        .collect();
+    let later_midground: Vec<_> = midground_rows
+        .map(|y| {
+            (0..later.width())
+                .map(|x| later.get(x, y).unwrap().ch)
+                .collect::<String>()
+        })
+        .collect();
+
+    assert!(
+        opening_midground != later_midground,
+        "later travel should reveal authored scenery rather than the opening midground again"
+    );
+
+    for (width, height) in [(80, 24), (236, 53)] {
+        let mut game = RunnerState::new(width, height, 0x12345678);
+        game.distance = 933.0;
+        game.world.update(933.0);
+        let mut frame = Buffer::new(width as u16, height as u16);
+        game.render(&mut frame, Locale::En);
+        let rendered = buffer_to_string(&frame);
+        println!("--- VISUAL QA: HIGH SPAN AT {width}x{height} ---\n{rendered}");
+        assert!(rendered.contains("NEXT STOP: Switch House"));
+        if width == 80 {
+            assert!(rendered.contains("___..----..___"));
+        }
+    }
+}
+
+#[test]
 fn cache_action_prompt_is_rendered_in_each_supported_locale() {
     let mut game = RunnerState::new(80, 24, 0x8765);
     let ground_y = game.world.ground_y as f32;
