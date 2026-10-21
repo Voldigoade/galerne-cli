@@ -1,6 +1,9 @@
-use galerne::game::runner::action::PlayerInput;
+use galerne::game::runner::action::{ActionState, PlayerInput};
 use galerne::game::runner::state::RunnerState;
+use galerne::game::runner::wind::TailwindTier;
+use galerne::storage::schema::SaveState;
 use galerne::terminal::buffer::Buffer;
+use galerne::ui::dashboard::render_refuge_panel;
 use galerne::ui::i18n::Locale;
 
 fn buffer_to_string(buf: &Buffer) -> String {
@@ -137,4 +140,96 @@ fn test_visual_qa_large_terminal_236x53() {
         pier_has_content,
         "Lower region must contain viaduct trusses and pier drops"
     );
+}
+
+#[test]
+fn test_visual_qa_wind_gliding_frame() {
+    let mut game = RunnerState::new(80, 24, 0x12345678);
+    game.player.action = ActionState::Gliding {
+        elapsed_secs: 0.0,
+        vertical_velocity: 0.0,
+    };
+    game.player.y = game.world.ground_y as f32 - 5.0;
+    game.tailwind_tier = TailwindTier::Tier2;
+
+    let mut buf = Buffer::new(80, 24);
+    game.render(&mut buf, Locale::En);
+
+    let rendered = buffer_to_string(&buf);
+    println!(
+        "--- VISUAL QA: WIND GLIDING FRAME (80x24) ---\n{}",
+        rendered
+    );
+    assert!(rendered.contains("TW:II") || rendered.contains("FLOW"));
+    assert!(rendered.contains('>') || rendered.contains('-') || rendered.contains('~'));
+}
+
+#[test]
+fn test_visual_qa_interior_gantry_sector2_120x35() {
+    let mut game = RunnerState::new(120, 35, 0x12345678);
+    game.distance = 450.0;
+    game.world.scroll_x = 450.0;
+    game.world.ensure_chunks_generated(450.0 + 200.0);
+
+    let mut buf = Buffer::new(120, 35);
+    game.render(&mut buf, Locale::En);
+
+    let rendered = buffer_to_string(&buf);
+    println!(
+        "--- VISUAL QA: SECTOR 2 INTERIOR GANTRY (120x35) ---\n{}",
+        rendered
+    );
+    assert_eq!(rendered.lines().count(), 35);
+    assert!(rendered.contains("450m") || rendered.contains("DIST"));
+}
+
+#[test]
+fn test_visual_qa_companion_roost_sector3_120x35() {
+    let mut game = RunnerState::new(120, 35, 0x12345678);
+    game.distance = 900.0;
+    game.world.scroll_x = 900.0;
+    game.world.ensure_chunks_generated(900.0 + 200.0);
+
+    let mut buf = Buffer::new(120, 35);
+    game.render(&mut buf, Locale::En);
+
+    let rendered = buffer_to_string(&buf);
+    println!(
+        "--- VISUAL QA: SECTOR 3 COMPANION ROOST (120x35) ---\n{}",
+        rendered
+    );
+    assert_eq!(rendered.lines().count(), 35);
+    assert!(rendered.contains("900m") || rendered.contains("DIST"));
+}
+
+#[test]
+fn test_visual_qa_refuge_dormant_and_restored_80x24() {
+    // 1. Dormant refuge
+    let mut dormant_save = SaveState::default();
+    dormant_save.world_progress.relay_restored = false;
+    let mut buf_dormant = Buffer::new(80, 24);
+    render_refuge_panel(&mut buf_dormant, &dormant_save, 2, 2, Locale::En);
+    let rendered_dormant = buffer_to_string(&buf_dormant);
+    println!(
+        "--- VISUAL QA: REFUGE (DORMANT) (80x24) ---\n{}",
+        rendered_dormant
+    );
+    assert!(rendered_dormant.contains("Dormant"));
+    assert!(rendered_dormant.contains("ABANDONED VIADUCT GANTRY"));
+
+    // 2. Restored refuge
+    let mut restored_save = SaveState::default();
+    restored_save.world_progress.relay_restored = true;
+    restored_save.companion.kael_at_refuge = true;
+    restored_save.refuge.power_restored = true;
+    let mut buf_restored = Buffer::new(80, 24);
+    render_refuge_panel(&mut buf_restored, &restored_save, 2, 2, Locale::En);
+    let rendered_restored = buffer_to_string(&buf_restored);
+    println!(
+        "--- VISUAL QA: REFUGE (RESTORED) (80x24) ---\n{}",
+        rendered_restored
+    );
+    assert!(rendered_restored.contains("Operational"));
+    assert!(rendered_restored.contains("POWERED VIADUCT GANTRY"));
+    assert!(rendered_restored.contains("Kael: Stationed at the observation window"));
 }

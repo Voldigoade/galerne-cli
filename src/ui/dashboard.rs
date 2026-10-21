@@ -65,6 +65,108 @@ impl DashboardTab {
     }
 }
 
+/// Renders the Refuge panel content onto a buffer.
+pub fn render_refuge_panel(
+    buf: &mut crate::terminal::buffer::Buffer,
+    save_state: &crate::storage::schema::SaveState,
+    px: u16,
+    py: u16,
+    locale: Locale,
+) {
+    let bg = Color::Reset;
+    let is_restored = save_state.world_progress.relay_restored;
+    let header = if is_restored {
+        t("refuge_restored_status", locale)
+    } else {
+        t("refuge_dormant_status", locale)
+    };
+    let status_color = if is_restored {
+        Color::Cyan
+    } else {
+        Color::DarkYellow
+    };
+    buf.draw_str_styled(px, py, header, Style::new(status_color, bg).bold());
+
+    let gantry_ascii = if is_restored {
+        &[
+            "       .---------------------------------------.       ",
+            "      /  [*]   POWERED VIADUCT GANTRY     [*]  \\      ",
+            "     /===========================================\\     ",
+            "     |  __      [WORKBENCH]       ____      ,(^) |     ",
+            "     | |##|    .-----------.     |====|    <{#}>~|     ",
+            "     | |##|    | * * * * * |     |====|     / \\  |     ",
+            "    ===============================================    ",
+            "       |  ONLINE - LINE 04 HUMMING - KAEL PRESENT |    ",
+        ]
+    } else {
+        &[
+            "       .---------------------------------------.       ",
+            "      /  [ ]   ABANDONED VIADUCT GANTRY   [ ]  \\      ",
+            "     /===========================================\\     ",
+            "     |  __      [WORKBENCH]       ____       [ ] |     ",
+            "     | |  |    .-----------.     |####|     .---.|     ",
+            "     | |__|    | _ _ _ _ _ |     |####|     |   ||     ",
+            "    ===============================================    ",
+            "       |       DORMANT - POWER OFFLINE       |         ",
+        ]
+    };
+
+    for (idx, line) in gantry_ascii.iter().enumerate() {
+        let style = if is_restored
+            && (line.contains("[*]") || line.contains("##") || line.contains("===="))
+        {
+            Style::new(Color::Cyan, bg).bold()
+        } else {
+            Style::new(Color::White, bg)
+        };
+        buf.draw_str_styled(px, py + 2 + idx as u16, line, style);
+    }
+
+    let y_info = py + 11;
+    let kael_status = if is_restored || save_state.companion.kael_at_refuge {
+        t("refuge_kael_present", locale)
+    } else if save_state.companion.met_kael {
+        "Kael: Encountered at High Roost"
+    } else {
+        t("refuge_kael_absent", locale)
+    };
+    buf.draw_str(
+        px,
+        y_info,
+        kael_status,
+        if is_restored {
+            Color::Yellow
+        } else {
+            Color::DarkGrey
+        },
+        bg,
+    );
+
+    let workbench_status = t("refuge_workbench_status", locale);
+    buf.draw_str(px, y_info + 1, workbench_status, Color::White, bg);
+
+    let progress_summary = format!(
+        "Region Progress: Checkpoints Unlocked {}/5  |  Line Status: {}",
+        save_state.world_progress.checkpoints_unlocked.len().min(5),
+        if is_restored { "RESTORED" } else { "OFFLINE" }
+    );
+    buf.draw_str_styled(
+        px,
+        y_info + 3,
+        &progress_summary,
+        Style::new(Color::Cyan, bg).bold(),
+    );
+
+    if is_restored && save_state.companion.kael_at_refuge {
+        buf.draw_str_styled(
+            px,
+            y_info + 5,
+            t("kael_refuge_dialogue", locale),
+            Style::new(Color::Yellow, bg).bold(),
+        );
+    }
+}
+
 /// Runs the interactive terminal home dashboard.
 pub fn run_dashboard() -> io::Result<()> {
     let _guard = TerminalGuard::enter()?;
@@ -218,97 +320,7 @@ pub fn run_dashboard() -> io::Result<()> {
                 }
             }
             DashboardTab::Refuge => {
-                let is_restored = save_state.world_progress.relay_restored;
-                let header = if is_restored {
-                    t("refuge_restored_status", locale)
-                } else {
-                    t("refuge_dormant_status", locale)
-                };
-                let status_color = if is_restored {
-                    Color::Cyan
-                } else {
-                    Color::DarkYellow
-                };
-                buf.draw_str_styled(px, py, header, Style::new(status_color, bg).bold());
-
-                let gantry_ascii = if is_restored {
-                    &[
-                        "       .---------------------------------------.       ",
-                        "      /  [*]   POWERED VIADUCT GANTRY     [*]  \\      ",
-                        "     /===========================================\\     ",
-                        "     |  __      [WORKBENCH]       ____      ,(^) |     ",
-                        "     | |##|    .-----------.     |====|    <{#}>~|     ",
-                        "     | |##|    | * * * * * |     |====|     / \\  |     ",
-                        "    ===============================================    ",
-                        "       |  ONLINE - LINE 04 HUMMING - KAEL PRESENT |    ",
-                    ]
-                } else {
-                    &[
-                        "       .---------------------------------------.       ",
-                        "      /  [ ]   ABANDONED VIADUCT GANTRY   [ ]  \\      ",
-                        "     /===========================================\\     ",
-                        "     |  __      [WORKBENCH]       ____       [ ] |     ",
-                        "     | |  |    .-----------.     |####|     .---.|     ",
-                        "     | |__|    | _ _ _ _ _ |     |####|     |   ||     ",
-                        "    ===============================================    ",
-                        "       |       DORMANT - POWER OFFLINE       |         ",
-                    ]
-                };
-
-                for (idx, line) in gantry_ascii.iter().enumerate() {
-                    let style = if is_restored
-                        && (line.contains("[*]") || line.contains("##") || line.contains("===="))
-                    {
-                        Style::new(Color::Cyan, bg).bold()
-                    } else {
-                        Style::new(Color::White, bg)
-                    };
-                    buf.draw_str_styled(px, py + 2 + idx as u16, line, style);
-                }
-
-                let y_info = py + 11;
-                let kael_status = if is_restored || save_state.companion.kael_at_refuge {
-                    t("refuge_kael_present", locale)
-                } else if save_state.companion.met_kael {
-                    "Kael: Encountered at High Roost"
-                } else {
-                    t("refuge_kael_absent", locale)
-                };
-                buf.draw_str(
-                    px,
-                    y_info,
-                    kael_status,
-                    if is_restored {
-                        Color::Yellow
-                    } else {
-                        Color::DarkGrey
-                    },
-                    bg,
-                );
-
-                let workbench_status = t("refuge_workbench_status", locale);
-                buf.draw_str(px, y_info + 1, workbench_status, Color::White, bg);
-
-                let progress_summary = format!(
-                    "Region Progress: Checkpoints Unlocked {}/5  |  Line Status: {}",
-                    save_state.world_progress.checkpoints_unlocked.len().min(5),
-                    if is_restored { "RESTORED" } else { "OFFLINE" }
-                );
-                buf.draw_str_styled(
-                    px,
-                    y_info + 3,
-                    &progress_summary,
-                    Style::new(Color::Cyan, bg).bold(),
-                );
-
-                if is_restored && save_state.companion.kael_at_refuge {
-                    buf.draw_str_styled(
-                        px,
-                        y_info + 5,
-                        t("kael_refuge_dialogue", locale),
-                        Style::new(Color::Yellow, bg).bold(),
-                    );
-                }
+                render_refuge_panel(buf, &save_state, px, py, locale);
             }
             DashboardTab::Inventory => {
                 buf.draw_str_styled(
