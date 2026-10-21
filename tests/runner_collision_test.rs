@@ -61,17 +61,23 @@ fn test_slide_clears_overhead_pipe() {
 }
 
 #[test]
-fn overhead_pipe_art_matches_its_traversal_span() {
-    let pipe = Obstacle::new(10.0, 18.0, ObstacleKind::OverheadPipe);
-    let sprite = pipe.sprite();
+fn obstacle_art_matches_its_traversal_span() {
+    for (kind, width, height, marker) in [
+        (ObstacleKind::LowBarrier, 8, 3, "#"),
+        (ObstacleKind::OverheadPipe, 8, 4, "[o]"),
+        (ObstacleKind::Pylon, 6, 5, "[]"),
+    ] {
+        let obstacle = Obstacle::new(10.0, 18.0, kind);
+        let sprite = obstacle.sprite();
 
-    assert_eq!(pipe.width(), 8);
-    assert_eq!(pipe.height(), 4);
-    assert_eq!(sprite.len(), pipe.height());
-    assert!(sprite
-        .iter()
-        .all(|line| line.chars().count() == pipe.width()));
-    assert!(sprite.join("\n").contains("[o]"));
+        assert_eq!(obstacle.width(), width, "unexpected width for {kind:?}");
+        assert_eq!(obstacle.height(), height, "unexpected height for {kind:?}");
+        assert_eq!(sprite.len(), obstacle.height());
+        assert!(sprite
+            .iter()
+            .all(|line| line.chars().count() == obstacle.width()));
+        assert!(sprite.join("\n").contains(marker));
+    }
 }
 
 #[test]
@@ -110,7 +116,9 @@ fn clean_jump_builds_quiet_flow_after_clearing_a_barrier() {
     });
 
     game.update(0.033, Some(PlayerInput::Jump));
-    while game.world.scroll_x < obstacle_x + 5.0 - game.player.x {
+    while game.world.scroll_x
+        < obstacle_x + game.world.chunks[0].obstacles[0].width() as f32 - game.player.x + 0.5
+    {
         game.update(0.033, None);
     }
 
@@ -139,7 +147,9 @@ fn clean_slide_builds_flow_after_a_pipe_clearance() {
     });
 
     game.update(0.033, Some(PlayerInput::Slide));
-    while game.world.scroll_x < obstacle_x + 8.0 - game.player.x {
+    while game.world.scroll_x
+        < obstacle_x + game.world.chunks[0].obstacles[0].width() as f32 - game.player.x + 0.5
+    {
         game.update(0.033, None);
     }
 
@@ -167,7 +177,9 @@ fn taking_the_raised_route_builds_flow_without_a_banner() {
     });
     game.player.y = ground_y - 5.0;
 
-    while game.world.scroll_x < obstacle_x + 5.0 - game.player.x {
+    while game.world.scroll_x
+        < obstacle_x + game.world.chunks[0].obstacles[0].width() as f32 - game.player.x + 0.5
+    {
         game.update(0.033, None);
     }
 
@@ -195,7 +207,9 @@ fn a_quiet_stretch_lets_flow_fade_back_to_its_base() {
     });
 
     game.update(0.033, Some(PlayerInput::Jump));
-    while game.world.scroll_x < obstacle_x + 5.0 - game.player.x {
+    while game.world.scroll_x
+        < obstacle_x + game.world.chunks[0].obstacles[0].width() as f32 - game.player.x + 0.5
+    {
         game.update(0.033, None);
     }
     assert!(game.flow_multiplier > 1.0);
@@ -234,7 +248,9 @@ fn a_clean_sequence_caps_flow_and_a_hit_resets_it_without_a_flow_banner() {
     });
     game.player.y = ground_y - 5.0;
 
-    while game.world.scroll_x < 31.0 {
+    while game.world.scroll_x
+        < 44.0 + game.world.chunks[0].obstacles[0].width() as f32 - game.player.x + 0.5
+    {
         game.update(0.033, None);
     }
 

@@ -284,43 +284,53 @@ fn compact_glide_renders_a_deployed_kite_over_the_traveler() {
 }
 
 #[test]
-fn overhead_pipe_renders_as_suspended_infrastructure_at_both_terminal_sizes() {
-    for (width, height, obstacle_x) in [(80, 24, 54.0), (236, 53, 180.0)] {
-        let mut game = RunnerState::new(width, height, 0x12345678);
-        let ground_y = game.world.ground_y as f32;
-        game.world.chunks.clear();
-        let chunk_index = (obstacle_x / CHUNK_WIDTH as f32).floor() as usize;
-        let chunk_start_x = (chunk_index * CHUNK_WIDTH) as f32;
-        let obstacle = Obstacle::new(
-            obstacle_x - chunk_start_x,
-            ground_y,
-            ObstacleKind::OverheadPipe,
-        );
-        game.world.chunks.push(Chunk {
-            index: chunk_index,
-            obstacles: vec![obstacle.clone()],
-            items: Vec::new(),
-            wind_currents: Vec::new(),
-            landmarks: Vec::new(),
-            walkways: Vec::new(),
-        });
+fn first_region_obstacles_render_at_both_terminal_sizes() {
+    for kind in [
+        ObstacleKind::LowBarrier,
+        ObstacleKind::OverheadPipe,
+        ObstacleKind::Pylon,
+    ] {
+        for (width, height, obstacle_x) in [(80, 24, 54.0), (236, 53, 180.0)] {
+            let mut game = RunnerState::new(width, height, 0x12345678);
+            let ground_y = game.world.ground_y as f32;
+            game.world.chunks.clear();
+            let chunk_index = (obstacle_x / CHUNK_WIDTH as f32).floor() as usize;
+            let chunk_start_x = (chunk_index * CHUNK_WIDTH) as f32;
+            let obstacle = Obstacle::new(obstacle_x - chunk_start_x, ground_y, kind);
+            game.world.chunks.push(Chunk {
+                index: chunk_index,
+                obstacles: vec![obstacle.clone()],
+                items: Vec::new(),
+                wind_currents: Vec::new(),
+                landmarks: Vec::new(),
+                walkways: Vec::new(),
+            });
 
-        let mut frame = Buffer::new(width as u16, height as u16);
-        game.render(&mut frame, Locale::En);
+            let mut frame = Buffer::new(width as u16, height as u16);
+            game.render(&mut frame, Locale::En);
 
-        println!(
-            "--- VISUAL QA: SUSPENDED PIPE ({width}x{height}) ---\n{}",
-            buffer_to_string(&frame)
-        );
-        let base_y = (ground_y - 2.0) as usize;
-        for (row, line) in obstacle.sprite().iter().enumerate() {
-            let y = base_y - (obstacle.sprite().len() - 1 - row);
-            for (column, glyph) in line.chars().enumerate().filter(|(_, glyph)| *glyph != ' ') {
-                let cell = frame
-                    .get((obstacle_x as usize + column) as u16, y as u16)
-                    .unwrap();
-                assert_eq!(cell.ch, glyph);
-                assert_eq!(cell.fg, galerne::terminal::buffer::Color::Cyan);
+            println!(
+                "--- VISUAL QA: {kind:?} ({width}x{height}) ---\n{}",
+                buffer_to_string(&frame)
+            );
+            let base_y = match kind {
+                ObstacleKind::OverheadPipe => (ground_y - 2.0) as usize,
+                ObstacleKind::LowBarrier | ObstacleKind::Pylon => ground_y as usize,
+            };
+            let color = match kind {
+                ObstacleKind::LowBarrier => galerne::terminal::buffer::Color::Red,
+                ObstacleKind::OverheadPipe => galerne::terminal::buffer::Color::Cyan,
+                ObstacleKind::Pylon => galerne::terminal::buffer::Color::Yellow,
+            };
+            for (row, line) in obstacle.sprite().iter().enumerate() {
+                let y = base_y - (obstacle.sprite().len() - 1 - row);
+                for (column, glyph) in line.chars().enumerate().filter(|(_, glyph)| *glyph != ' ') {
+                    let cell = frame
+                        .get((obstacle_x as usize + column) as u16, y as u16)
+                        .unwrap();
+                    assert_eq!(cell.ch, glyph);
+                    assert_eq!(cell.fg, color);
+                }
             }
         }
     }

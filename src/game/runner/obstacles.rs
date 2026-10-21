@@ -4,11 +4,11 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ObstacleKind {
-    /// Low hurdle or rubble (2 rows high on ground): must JUMP over.
+    /// Broken rail rubble on the lower route: must JUMP over.
     LowBarrier,
     /// Suspended conduit across the lower route: must SLIDE under.
     OverheadPipe,
-    /// Tall pylon or antenna (4 rows high): requires high jump or dash timing.
+    /// Ruined signal pylon on the lower route: requires a high jump or dash timing.
     Pylon,
 }
 
@@ -33,17 +33,17 @@ impl Obstacle {
 
     pub fn width(&self) -> usize {
         match self.kind {
-            ObstacleKind::LowBarrier => 4,
+            ObstacleKind::LowBarrier => 8,
             ObstacleKind::OverheadPipe => 8,
-            ObstacleKind::Pylon => 4,
+            ObstacleKind::Pylon => 6,
         }
     }
 
     pub fn height(&self) -> usize {
         match self.kind {
-            ObstacleKind::LowBarrier => 2,
+            ObstacleKind::LowBarrier => 3,
             ObstacleKind::OverheadPipe => 4,
-            ObstacleKind::Pylon => 4,
+            ObstacleKind::Pylon => 5,
         }
     }
 
@@ -69,9 +69,9 @@ impl Obstacle {
 
     pub fn sprite(&self) -> &'static [&'static str] {
         match self.kind {
-            ObstacleKind::LowBarrier => &[" /\\ ", "[##]"],
+            ObstacleKind::LowBarrier => &[" /\\__/\\ ", "_[####]_", "==/  \\=="],
             ObstacleKind::OverheadPipe => &["| |  | |", "|_|__|_|", "|=[o]==|", r"|_\==/_|"],
-            ObstacleKind::Pylon => &[" /\\ ", "/||\\", "+==+", "|  |"],
+            ObstacleKind::Pylon => &["  /\\  ", " /||\\ ", "|/||\\|", "+====+", "|_[]_|"],
         }
     }
 }
