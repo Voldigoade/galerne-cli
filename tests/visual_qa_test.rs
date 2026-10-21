@@ -28,12 +28,12 @@ fn buffer_to_string(buf: &Buffer) -> String {
 #[test]
 fn restored_line_resumes_the_suspended_tram() {
     let mut dormant = Buffer::new(236, 53);
-    ParallaxEngine::default().render_backdrop(&mut dormant, 48, false);
+    ParallaxEngine::default().render_backdrop(&mut dormant, 48, false, false);
     assert!(!buffer_to_string(&dormant).contains('o'));
 
     let mut active = ParallaxEngine::default();
     let mut running = Buffer::new(236, 53);
-    active.render_backdrop(&mut running, 48, true);
+    active.render_backdrop(&mut running, 48, true, false);
     let wheels_at_restored_start: Vec<_> = (0..running.height())
         .flat_map(|y| (0..running.width()).map(move |x| (x, y)))
         .filter(|(x, y)| running.get(*x, *y).is_some_and(|cell| cell.ch == 'o'))
@@ -42,7 +42,7 @@ fn restored_line_resumes_the_suspended_tram() {
 
     active.update(60.0);
     let mut moving = Buffer::new(236, 53);
-    active.render_backdrop(&mut moving, 48, true);
+    active.render_backdrop(&mut moving, 48, true, false);
     let wheels_in_motion: Vec<_> = (0..moving.height())
         .flat_map(|y| (0..moving.width()).map(move |x| (x, y)))
         .filter(|(x, y)| moving.get(*x, *y).is_some_and(|cell| cell.ch == 'o'))
@@ -55,12 +55,12 @@ fn restored_line_resumes_the_suspended_tram() {
 fn authored_midground_changes_across_the_first_journey() {
     let mut panorama = ParallaxEngine::default();
     let mut opening = Buffer::new(236, 53);
-    panorama.render_backdrop(&mut opening, 48, false);
+    panorama.render_backdrop(&mut opening, 48, false, false);
 
     panorama.update(933.3333);
     panorama.mid_offset = 420.0;
     let mut later = Buffer::new(236, 53);
-    panorama.render_backdrop(&mut later, 48, false);
+    panorama.render_backdrop(&mut later, 48, false, false);
 
     let midground_rows = 29..47;
     let opening_midground: Vec<_> = midground_rows
@@ -97,6 +97,48 @@ fn authored_midground_changes_across_the_first_journey() {
             assert!(rendered.contains("___..----..___"));
         }
     }
+}
+
+#[test]
+fn restoring_the_canal_gate_changes_the_hanging_garden_in_the_world_frame() {
+    let mut closed = RunnerState::new(236, 53, 0x12345678);
+    let mut flowing = RunnerState::new(236, 53, 0x12345678);
+    let travel = 1545.0 - closed.player.x;
+    closed.world.update(travel);
+    flowing.world.update(travel);
+    closed.distance = closed.world.scroll_x;
+    flowing.distance = flowing.world.scroll_x;
+    closed
+        .world
+        .ensure_chunks_generated(closed.world.scroll_x + 336.0);
+    flowing
+        .world
+        .ensure_chunks_generated(flowing.world.scroll_x + 336.0);
+    flowing.update(0.033, Some(PlayerInput::Interact));
+    closed.update(0.033, None);
+
+    let mut dry_frame = Buffer::new(236, 53);
+    let mut flowing_frame = Buffer::new(236, 53);
+    closed.render(&mut dry_frame, Locale::En);
+    flowing.render(&mut flowing_frame, Locale::En);
+
+    println!(
+        "--- VISUAL QA: CANAL GARDEN FLOWING (236x53) ---\n{}",
+        buffer_to_string(&flowing_frame)
+    );
+    assert_ne!(
+        buffer_to_string(&dry_frame),
+        buffer_to_string(&flowing_frame)
+    );
+    let stream_cell = (0..flowing_frame.height())
+        .flat_map(|y| (0..flowing_frame.width()).map(move |x| (x, y)))
+        .find(|(x, y)| {
+            flowing_frame.get(*x, *y).is_some_and(|cell| {
+                cell.ch == '>' && cell.fg == galerne::terminal::buffer::Color::Cyan
+            })
+        })
+        .expect("restored canal should render a cyan water channel");
+    assert_ne!(dry_frame.get(stream_cell.0, stream_cell.1).unwrap().ch, '>');
 }
 
 #[test]

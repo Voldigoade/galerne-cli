@@ -2,6 +2,7 @@ use std::fs;
 
 use galerne::storage::atomic::{decode_and_verify, encode_with_header};
 use galerne::storage::manager::{SaveLoadError, SaveManager};
+use galerne::storage::schema::{SaveState, CURRENT_SCHEMA_VERSION};
 
 #[test]
 fn test_v1_save_fixture_loads_perfectly() {
@@ -111,6 +112,58 @@ fn test_v2_save_migrates_cleanly_to_v3() {
     );
     assert!(!loaded.world_progress.relay_restored);
     assert!(!loaded.companion.met_kael);
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[test]
+fn current_schema_save_without_canal_progress_loads_with_gate_closed() {
+    let temp_dir = std::env::temp_dir().join(format!(
+        "galerne_missing_canal_progress_{}",
+        std::process::id()
+    ));
+    let _ = fs::remove_dir_all(&temp_dir);
+    fs::create_dir_all(&temp_dir).expect("create temp dir");
+    let manager = SaveManager::with_dir(&temp_dir);
+
+    let mut old_current_schema = serde_json::to_value(SaveState::default()).unwrap();
+    old_current_schema["world_progress"]
+        .as_object_mut()
+        .unwrap()
+        .remove("canal_gate_opened");
+    let payload = serde_json::to_vec(&old_current_schema).unwrap();
+    fs::write(
+        manager.primary_save_path(),
+        encode_with_header(CURRENT_SCHEMA_VERSION, &payload),
+    )
+    .expect("write old current-schema save");
+
+    let loaded = manager.load().expect("load old current-schema save");
+    let loaded_json = serde_json::to_value(loaded).unwrap();
+    assert_eq!(
+        loaded_json["world_progress"]["canal_gate_opened"],
+        serde_json::Value::Bool(false)
+    );
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[test]
+fn canal_gate_progress_survives_a_save_round_trip() {
+    let temp_dir = std::env::temp_dir().join(format!(
+        "galerne_canal_progress_round_trip_{}",
+        std::process::id()
+    ));
+    let _ = fs::remove_dir_all(&temp_dir);
+    fs::create_dir_all(&temp_dir).expect("create temp dir");
+    let manager = SaveManager::with_dir(&temp_dir);
+
+    let mut state = SaveState::default();
+    state.world_progress.canal_gate_opened = true;
+    manager.save(&state).expect("save restored canal gate");
+
+    let loaded = manager.load().expect("load save with restored canal gate");
+    assert!(loaded.world_progress.canal_gate_opened);
 
     let _ = fs::remove_dir_all(&temp_dir);
 }

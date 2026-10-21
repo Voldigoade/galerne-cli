@@ -23,6 +23,7 @@ pub enum LandmarkKind {
     CompanionKael { spoken: bool },
     SecretCache { opened: bool },
     RelayNodeConsole { restored: bool },
+    CanalSluice { opened: bool },
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -48,6 +49,20 @@ impl Landmark {
             LandmarkKind::RelayNodeConsole { .. } => {
                 &["   /|\\   ", "  [|04|] ", " /======\\", " |[====]|"]
             }
+            LandmarkKind::CanalSluice { opened: false } => &[
+                "   .-----.   ",
+                "   |     |   ",
+                "===|--O--|===",
+                "   |_____|   ",
+                "     ||",
+            ],
+            LandmarkKind::CanalSluice { opened: true } => &[
+                "   .-----.   ",
+                "   |     |   ",
+                "===|     |-->",
+                "   |_____|   ",
+                "   ~~~~~~~~",
+            ],
         }
     }
 
@@ -58,6 +73,7 @@ impl Landmark {
             LandmarkKind::CompanionKael { .. } => 8.0,
             LandmarkKind::SecretCache { .. } => 9.0,
             LandmarkKind::RelayNodeConsole { .. } => 9.0,
+            LandmarkKind::CanalSluice { .. } => 13.0,
         };
         (abs_x - 1.0, self.y - 4.0, abs_x + w + 1.0, self.y + 1.0)
     }
@@ -390,6 +406,11 @@ impl ChunkWorld {
                 obstacles.push(Obstacle::new(15.0, ground_y, ObstacleKind::OverheadPipe));
             }
             30 => {
+                landmarks.push(Landmark::new(
+                    35.0,
+                    ground_y,
+                    LandmarkKind::CanalSluice { opened: false },
+                ));
                 items.push(PickupItem::new(28.0, ground_y - 1.0, ItemKind::GaleShard));
             }
             _ => {

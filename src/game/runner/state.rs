@@ -39,6 +39,8 @@ pub struct RunnerSnapshot {
     #[serde(default)]
     pub relay_restored: bool,
     #[serde(default)]
+    pub canal_gate_opened: bool,
+    #[serde(default)]
     pub last_checkpoint_id: u32,
     #[serde(default)]
     pub last_checkpoint_distance: f32,
@@ -71,6 +73,8 @@ pub struct RunnerState {
     pub active_surge_timer: f32,
     #[serde(default)]
     pub relay_restored: bool,
+    #[serde(default)]
+    pub canal_gate_opened: bool,
     #[serde(default)]
     pub relay_activation_timer: Option<f32>,
     #[serde(default)]
@@ -115,6 +119,7 @@ impl RunnerState {
             active_multiplier_timer: 0.0,
             active_surge_timer: 0.0,
             relay_restored: false,
+            canal_gate_opened: false,
             relay_activation_timer: None,
             last_checkpoint_id: 0,
             last_checkpoint_distance: 0.0,
@@ -168,6 +173,7 @@ impl RunnerState {
             onboarding_jump_done: self.onboarding_jump_done,
             onboarding_slide_done: self.onboarding_slide_done,
             relay_restored: self.relay_restored,
+            canal_gate_opened: self.canal_gate_opened,
             last_checkpoint_id: self.last_checkpoint_id,
             last_checkpoint_distance: self.last_checkpoint_distance,
             companion_met: self.companion_met,
@@ -192,6 +198,7 @@ impl RunnerState {
         self.onboarding_jump_done = snap.onboarding_jump_done;
         self.onboarding_slide_done = snap.onboarding_slide_done;
         self.relay_restored = snap.relay_restored;
+        self.canal_gate_opened = snap.canal_gate_opened;
         self.last_checkpoint_id = snap.last_checkpoint_id;
         self.last_checkpoint_distance = snap.last_checkpoint_distance;
         self.companion_met = snap.companion_met;
@@ -246,6 +253,9 @@ impl RunnerState {
                         if !restored && !self.relay_restored =>
                     {
                         Some("prompt_connect_line")
+                    }
+                    LandmarkKind::CanalSluice { opened } if !opened && !self.canal_gate_opened => {
+                        Some("prompt_open_sluice")
                     }
                     _ => None,
                 };
@@ -414,6 +424,11 @@ impl RunnerState {
         for chunk in self.world.active_chunks_mut() {
             let chunk_start_x = (chunk.index * CHUNK_WIDTH) as f32;
             for lm in &mut chunk.landmarks {
+                if self.canal_gate_opened {
+                    if let LandmarkKind::CanalSluice { opened } = &mut lm.kind {
+                        *opened = true;
+                    }
+                }
                 let abs_x = chunk_start_x + lm.rel_x;
                 let screen_x = abs_x - scroll_x;
 
@@ -477,9 +492,21 @@ impl RunnerState {
                                 t("relay_restored", self.locale),
                             ));
                         }
+                        LandmarkKind::CanalSluice { opened }
+                            if interaction_pressed && !*opened && !self.canal_gate_opened =>
+                        {
+                            *opened = true;
+                            self.canal_gate_opened = true;
+                            self.floating_indicators.push(FloatingIndicator::new(
+                                self.player.x + 1.0,
+                                self.player.y - 5.5,
+                                t("canal_flow_restored", self.locale),
+                            ));
+                        }
                         LandmarkKind::CompanionKael { .. }
                         | LandmarkKind::SecretCache { .. }
-                        | LandmarkKind::RelayNodeConsole { .. } => {}
+                        | LandmarkKind::RelayNodeConsole { .. }
+                        | LandmarkKind::CanalSluice { .. } => {}
                     }
                 }
             }
@@ -679,9 +706,12 @@ impl RunnerState {
         let height = buf.height() as usize;
         let ground_y = self.world.ground_y;
 
-        self.world
-            .parallax
-            .render_backdrop(buf, ground_y, self.relay_restored);
+        self.world.parallax.render_backdrop(
+            buf,
+            ground_y,
+            self.relay_restored,
+            self.canal_gate_opened,
+        );
 
         for chunk in self.world.active_chunks() {
             let chunk_start_x = (chunk.index * CHUNK_WIDTH) as f32;
@@ -750,6 +780,7 @@ impl RunnerState {
                             LandmarkKind::CompanionKael { .. } => Color::Yellow,
                             LandmarkKind::SecretCache { .. } => Color::Magenta,
                             LandmarkKind::RelayNodeConsole { .. } => Color::Cyan,
+                            LandmarkKind::CanalSluice { .. } => Color::Cyan,
                         };
                         buf.draw_str_styled(
                             screen_x as u16,

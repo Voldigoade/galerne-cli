@@ -1051,6 +1051,7 @@ fn sync_game_to_save_state(
     if game.secret_cache_found {
         save_state.world_progress.secret_cache_found = true;
     }
+    save_state.world_progress.canal_gate_opened |= game.canal_gate_opened;
     for relic in &game.collected_relics {
         match relic {
             crate::game::runner::items::ItemKind::ResonanceCore => {
@@ -1101,6 +1102,7 @@ pub fn run_manual_game(
     } else {
         save_state.total_runs_started += 1;
     }
+    game.canal_gate_opened |= save_state.world_progress.canal_gate_opened;
 
     let start = Instant::now();
     let initial_shards = game.shards_collected;

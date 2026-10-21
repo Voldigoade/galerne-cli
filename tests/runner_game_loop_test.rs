@@ -1,7 +1,7 @@
 use galerne::game::runner::action::PlayerInput;
 use galerne::game::runner::state::RunnerState;
 use galerne::terminal::buffer::Buffer;
-use galerne::ui::i18n::Locale;
+use galerne::ui::i18n::{t, Locale, ALL_LOCALES};
 
 #[test]
 fn test_runner_state_initialization_and_forward_progression() {
@@ -104,4 +104,57 @@ fn test_runner_snapshot_deterministic_resumption() {
     assert_eq!(game2.shards_collected, game1.shards_collected);
     assert_eq!(game2.player.y, game1.player.y);
     assert_eq!(game2.world.scroll_x, game1.world.scroll_x);
+}
+
+#[test]
+fn canal_sluice_opens_once_and_acknowledges_the_player_in_every_locale() {
+    for &locale in ALL_LOCALES {
+        let mut game = RunnerState::new(80, 24, 0x12345678);
+        game.set_locale(locale);
+        let travel = 1535.0 - game.player.x - 2.0;
+        game.world.update(travel);
+        game.world
+            .ensure_chunks_generated(game.world.scroll_x + 100.0);
+
+        assert_eq!(game.current_prompt(), Some("prompt_open_sluice"));
+        let mut frame = Buffer::new(80, 24);
+        game.render(&mut frame, locale);
+        let prompt_row: String = (0..frame.width())
+            .filter_map(|x| {
+                frame
+                    .get(x, 2)
+                    .filter(|cell| cell.width != 0)
+                    .map(|cell| cell.ch)
+            })
+            .collect();
+        assert!(
+            prompt_row.contains(t("prompt_open_sluice", locale)),
+            "prompt row {prompt_row:?} should contain {:?} for {locale:?}",
+            t("prompt_open_sluice", locale)
+        );
+
+        game.update(0.033, Some(PlayerInput::Interact));
+        game.update(0.033, Some(PlayerInput::Interact));
+
+        assert_eq!(game.current_prompt(), None);
+        assert_eq!(
+            game.floating_indicators
+                .iter()
+                .filter(|indicator| indicator.text == t("canal_flow_restored", locale))
+                .count(),
+            1
+        );
+    }
+}
+
+#[test]
+fn canal_gate_state_survives_an_active_run_snapshot() {
+    let mut opened_game = RunnerState::new(80, 24, 0x12345678);
+    opened_game.canal_gate_opened = true;
+    let snapshot = opened_game.create_snapshot();
+
+    let mut resumed_game = RunnerState::new(80, 24, 0);
+    resumed_game.resume_snapshot(&snapshot);
+
+    assert!(resumed_game.canal_gate_opened);
 }

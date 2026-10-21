@@ -82,6 +82,8 @@ pub struct WorldProgress {
     pub relay_restored: bool,
     pub secret_cache_found: bool,
     pub high_truss_explored: bool,
+    #[serde(default)]
+    pub canal_gate_opened: bool,
 }
 
 impl Default for WorldProgress {
@@ -92,6 +94,7 @@ impl Default for WorldProgress {
             relay_restored: false,
             secret_cache_found: false,
             high_truss_explored: false,
+            canal_gate_opened: false,
         }
     }
 }

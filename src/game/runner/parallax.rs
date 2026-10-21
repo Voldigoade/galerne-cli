@@ -267,6 +267,27 @@ const HANGING_GARDEN_COMPACT: &[&str] = &[
     r"~~~~~   ~~~~~~   ~~~~~~",
 ];
 
+const FLOWING_HANGING_GARDEN: &[&str] = &[
+    r"          v       .--------------------.        v",
+    r"     _____/ \_____| [] [] [] [] [] []   |______/ \___",
+    r"    |   []    []  |____________________|  []     []  |",
+    r"    |_____________|    _    _    _    _|____________|",
+    r"         ||     |___| |[]| |[]| |[]| |___|     ||",
+    r"    v    || /\   ||   ||   ||   ||   ||   /\  ||   v",
+    r" ___||___||/  \__||___||___||___||___||__/  \_||___||___",
+    r"       ||       ||       ||       ||       ||",
+    r" ~~~~~~~~~~~~>>>>>>~~~~~~~~~~~~",
+];
+
+const FLOWING_HANGING_GARDEN_COMPACT: &[&str] = &[
+    r"    v   .-----------.   v",
+    r" ___/\__| [] [] []  |__/\___",
+    r"|________|__________|________|",
+    r"   ||   |[]| || |[]|   ||",
+    r"_v_||__/  \_||_/  \__||_||v_",
+    r"~~~~~>>>>~~~~~",
+];
+
 const DISTANT_SPAN: &[&str] = &[
     r"                                .",
     r"                __..---..___.-'|`-.__",
@@ -341,7 +362,13 @@ impl ParallaxEngine {
         self.fg_offset += world_dx * 1.35;
     }
 
-    pub fn render_backdrop(&self, buf: &mut Buffer, ground_y: usize, relay_restored: bool) {
+    pub fn render_backdrop(
+        &self,
+        buf: &mut Buffer,
+        ground_y: usize,
+        relay_restored: bool,
+        canal_gate_opened: bool,
+    ) {
         let width = buf.width() as usize;
         let height = buf.height() as usize;
         if height < 10 || width < 40 || ground_y < 5 {
@@ -479,12 +506,22 @@ impl ParallaxEngine {
             ScenicArt::new(540, WATER_STATION, WATER_STATION_COMPACT, Color::DarkGrey),
             relay_restored,
         );
+        let hanging_garden = if canal_gate_opened {
+            ScenicArt::new(
+                780,
+                FLOWING_HANGING_GARDEN,
+                FLOWING_HANGING_GARDEN_COMPACT,
+                Color::DarkGrey,
+            )
+        } else {
+            ScenicArt::new(780, HANGING_GARDEN, HANGING_GARDEN_COMPACT, Color::DarkGrey)
+        };
         draw_band_art(
             buf,
             self.mid_offset,
             mid_end,
             mid_band_height,
-            ScenicArt::new(780, HANGING_GARDEN, HANGING_GARDEN_COMPACT, Color::DarkGrey),
+            hanging_garden,
             relay_restored,
         );
         draw_scene_art(
@@ -609,6 +646,7 @@ fn draw_scene_art(
             let color = match glyph {
                 '#' | 'v' | '^' => Color::DarkGreen,
                 '~' => Color::DarkCyan,
+                '>' => Color::Cyan,
                 '[' | ']' if base_color == Color::DarkGrey => Color::Yellow,
                 '=' | '+' | '|' if relay_restored => Color::DarkCyan,
                 _ => base_color,

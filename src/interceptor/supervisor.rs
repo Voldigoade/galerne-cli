@@ -130,6 +130,7 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
     } else {
         save_state.total_runs_started += 1;
     }
+    game.canal_gate_opened |= save_state.world_progress.canal_gate_opened;
 
     let initial_shards = game.shards_collected;
     let initial_dist = game.distance;
@@ -244,6 +245,7 @@ pub fn execute_wrapped_task(args: &[String]) -> io::Result<i32> {
     if game.secret_cache_found {
         save_state.world_progress.secret_cache_found = true;
     }
+    save_state.world_progress.canal_gate_opened |= game.canal_gate_opened;
     for relic in &game.collected_relics {
         match relic {
             crate::game::runner::items::ItemKind::ResonanceCore => {
