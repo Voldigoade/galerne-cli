@@ -13,10 +13,20 @@ const EMBEDDED_BINARY: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/embedde
 fn main() {
     let args: Vec<String> = env::args().collect();
     let is_uninstall = args.iter().any(|a| a == "--uninstall" || a == "-u");
+    let is_upgrade = args.iter().any(|a| a == "--upgrade");
     let is_silent = args
         .iter()
         .any(|a| a == "--silent" || a == "-s" || a == "-q" || a == "--quiet");
     let show_help = args.iter().any(|a| a == "--help" || a == "-h");
+
+    let wait_pid: Option<u32> = args
+        .windows(2)
+        .find(|w| w[0] == "--wait-pid")
+        .and_then(|w| w[1].parse().ok());
+    let target_path: Option<PathBuf> = args
+        .windows(2)
+        .find(|w| w[0] == "--target")
+        .map(|w| PathBuf::from(&w[1]));
 
     if show_help {
         println!("Galerne Native Setup v{}\n", galerne::VERSION);
@@ -25,6 +35,7 @@ fn main() {
         println!("OPTIONS:");
         println!("  -s, --silent       Install non-interactively to standard user path");
         println!("  -u, --uninstall    Cleanly remove Galerne binary, PATH entry, and shell hooks");
+        println!("      --upgrade      Perform upgrade handoff replacing target binary safely");
         println!("  -h, --help         Show this help overview\n");
         return;
     }
@@ -39,7 +50,9 @@ fn main() {
         println!("╚════════════════════════════════════════════════════════════╝\n");
     }
 
-    if is_uninstall {
+    if is_upgrade {
+        perform_upgrade(is_silent, wait_pid, target_path);
+    } else if is_uninstall {
         perform_uninstall(is_silent);
     } else {
         perform_install(is_silent);
@@ -264,5 +277,125 @@ fn remove_from_user_path(dir: &Path) {
     #[cfg(not(windows))]
     {
         let _ = dir_str;
+    }
+}
+
+fn wait_for_process_exit(pid: u32, max_wait_secs: u64) {
+    let start = std::time::Instant::now();
+    let max_dur = std::time::Duration::from_secs(max_wait_secs);
+
+    while start.elapsed() < max_dur {
+        #[cfg(windows)]
+        {
+            let output = Command::new("tasklist")
+                .args(["/FI", &format!("PID eq {}", pid)])
+                .output();
+            if let Ok(out) = output {
+                let s = String::from_utf8_lossy(&out.stdout);
+                if !s.contains(&pid.to_string()) {
+                    return;
+                }
+            } else {
+                return;
+            }
+        }
+        #[cfg(unix)]
+        {
+            let ret = unsafe { libc::kill(pid as libc::pid_t, 0) };
+            if ret != 0 {
+                return;
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+}
+
+fn perform_upgrade(silent: bool, wait_pid: Option<u32>, target_path: Option<PathBuf>) {
+    if let Some(pid) = wait_pid {
+        if !silent {
+            println!(
+                "Waiting for previous Galerne process (PID {}) to exit...",
+                pid
+            );
+        }
+        wait_for_process_exit(pid, 15);
+    }
+
+    let target_bin = target_path.unwrap_or_else(|| get_install_dir().join(get_binary_name()));
+
+    if let Some(parent) = target_bin.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+
+    let binary_bytes = if !EMBEDDED_BINARY.is_empty() {
+        EMBEDDED_BINARY.to_vec()
+    } else {
+        let current_dir = env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+            .unwrap_or_else(|| PathBuf::from("."));
+        let sibling_bin = current_dir.join(get_binary_name());
+        if sibling_bin.exists() {
+            fs::read(&sibling_bin).unwrap_or_default()
+        } else {
+            Vec::new()
+        }
+    };
+
+    if binary_bytes.is_empty() {
+        eprintln!("[✕] Error: No upgrade payload available");
+        std::process::exit(1);
+    }
+
+    let backup_bin = target_bin.with_extension("exe.old");
+    let had_existing = target_bin.exists();
+    if had_existing {
+        let _ = fs::rename(&target_bin, &backup_bin);
+    }
+
+    let write_res = (|| -> io::Result<()> {
+        let mut file = File::create(&target_bin)?;
+        file.write_all(&binary_bytes)?;
+        file.sync_all()?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&target_bin, fs::Permissions::from_mode(0o755))?;
+        }
+        Ok(())
+    })();
+
+    if let Err(e) = write_res {
+        if had_existing {
+            let _ = fs::rename(&backup_bin, &target_bin);
+        }
+        eprintln!("[✕] Upgrade failed to write binary: {}", e);
+        std::process::exit(1);
+    }
+
+    let smoke_check = std::process::Command::new(&target_bin)
+        .arg("--version")
+        .output();
+    if let Ok(out) = smoke_check {
+        if !out.status.success() {
+            if had_existing {
+                let _ = fs::rename(&backup_bin, &target_bin);
+            }
+            eprintln!("[✕] Upgrade smoke check failed. Rolled back to previous version.");
+            std::process::exit(1);
+        }
+    }
+
+    if had_existing {
+        let _ = fs::remove_file(&backup_bin);
+    }
+
+    if let Some(parent) = target_bin.parent() {
+        add_to_user_path(parent);
+    }
+    let _ = galerne::shell::setup_all_shells();
+
+    if !silent {
+        println!("[✓] Galerne successfully upgraded to v{}", galerne::VERSION);
     }
 }
