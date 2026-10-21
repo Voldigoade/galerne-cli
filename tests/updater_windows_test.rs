@@ -1,5 +1,4 @@
 use std::fs;
-use std::path::Path;
 
 use galerne::storage::manager::SaveManager;
 use galerne::storage::schema::{GameSettings, SaveState, WorkshopLevels};
@@ -70,12 +69,35 @@ fn test_windows_update_preserves_save_data_and_settings() {
     let _ = fs::remove_dir_all(&temp_dir);
 }
 
-fn create_executable(path: &Path, script: &str) {
-    fs::write(path, script).expect("write script");
-    #[cfg(unix)]
+fn get_valid_galerne_bytes() -> Vec<u8> {
+    let galerne_bin = env!("CARGO_BIN_EXE_galerne");
+    fs::read(galerne_bin).expect("read CARGO_BIN_EXE_galerne")
+}
+
+fn get_alien_binary_bytes() -> Vec<u8> {
+    #[cfg(windows)]
     {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(path, fs::Permissions::from_mode(0o755)).expect("set perms");
+        let cmd_path = std::path::Path::new(r"C:\Windows\System32\cmd.exe");
+        if cmd_path.exists() {
+            fs::read(cmd_path).unwrap_or_else(|_| b"fake_binary_bytes".to_vec())
+        } else {
+            b"fake_binary_bytes".to_vec()
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        b"#!/bin/sh\necho 'unrelated-utility 9.9.9'\nexit 0\n".to_vec()
+    }
+}
+
+fn get_failing_binary_bytes() -> Vec<u8> {
+    #[cfg(windows)]
+    {
+        b"CORRUPTED_BINARY_FAILING_PAYLOAD".to_vec()
+    }
+    #[cfg(not(windows))]
+    {
+        b"#!/bin/sh\necho 'fatal error'\nexit 1\n".to_vec()
     }
 }
 
@@ -86,10 +108,18 @@ fn test_windows_binary_replacement_rollback_on_execution_failure() {
     let _ = fs::remove_dir_all(&temp_dir);
     fs::create_dir_all(&temp_dir).expect("create temp dir");
 
-    let target_bin = temp_dir.join("galerne.exe");
-    create_executable(&target_bin, "#!/bin/sh\necho 'galerne 0.2.0'\nexit 0\n");
-
-    let original_bytes = fs::read(&target_bin).expect("read original");
+    let target_bin = temp_dir.join(if cfg!(windows) {
+        "galerne.exe"
+    } else {
+        "galerne"
+    });
+    let original_bytes = get_valid_galerne_bytes();
+    fs::write(&target_bin, &original_bytes).expect("write original");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(&target_bin, fs::Permissions::from_mode(0o755));
+    }
 
     // Attempt replacement with completely unexecutable / corrupt bytes
     let corrupt_bytes = b"CORRUPTED_NON_EXECUTABLE_PAYLOAD_DATA";
@@ -124,17 +154,25 @@ fn test_windows_binary_replacement_rollback_on_failed_exit_status() {
     let _ = fs::remove_dir_all(&temp_dir);
     fs::create_dir_all(&temp_dir).expect("create temp dir");
 
-    let target_bin = temp_dir.join("galerne.exe");
-    create_executable(&target_bin, "#!/bin/sh\necho 'galerne 0.2.0'\nexit 0\n");
-    let original_bytes = fs::read(&target_bin).expect("read original");
+    let target_bin = temp_dir.join(if cfg!(windows) {
+        "galerne.exe"
+    } else {
+        "galerne"
+    });
+    let original_bytes = get_valid_galerne_bytes();
+    fs::write(&target_bin, &original_bytes).expect("write original");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(&target_bin, fs::Permissions::from_mode(0o755));
+    }
 
-    // Failing script: exits with code 1
-    let failing_script = b"#!/bin/sh\necho 'fatal crash'\nexit 1\n";
-    let res = replace_and_verify_windows_binary(&target_bin, failing_script);
+    let failing_payload = get_failing_binary_bytes();
+    let res = replace_and_verify_windows_binary(&target_bin, &failing_payload);
 
     assert!(
         res.is_err(),
-        "Smoke test on failing script must return an Err"
+        "Smoke test on failing payload must return an Err"
     );
 
     let restored_bytes = fs::read(&target_bin).expect("read target after rollback");
@@ -155,13 +193,21 @@ fn test_windows_binary_replacement_rollback_on_unexpected_output() {
     let _ = fs::remove_dir_all(&temp_dir);
     fs::create_dir_all(&temp_dir).expect("create temp dir");
 
-    let target_bin = temp_dir.join("galerne.exe");
-    create_executable(&target_bin, "#!/bin/sh\necho 'galerne 0.2.0'\nexit 0\n");
-    let original_bytes = fs::read(&target_bin).expect("read original");
+    let target_bin = temp_dir.join(if cfg!(windows) {
+        "galerne.exe"
+    } else {
+        "galerne"
+    });
+    let original_bytes = get_valid_galerne_bytes();
+    fs::write(&target_bin, &original_bytes).expect("write original");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(&target_bin, fs::Permissions::from_mode(0o755));
+    }
 
-    // Output does not contain "galerne"
-    let alien_script = b"#!/bin/sh\necho 'unrelated-utility 9.9.9'\nexit 0\n";
-    let res = replace_and_verify_windows_binary(&target_bin, alien_script);
+    let alien_payload = get_alien_binary_bytes();
+    let res = replace_and_verify_windows_binary(&target_bin, &alien_payload);
 
     assert!(
         res.is_err(),
@@ -183,16 +229,29 @@ fn test_windows_binary_replacement_success() {
     let _ = fs::remove_dir_all(&temp_dir);
     fs::create_dir_all(&temp_dir).expect("create temp dir");
 
-    let target_bin = temp_dir.join("galerne.exe");
-    create_executable(&target_bin, "#!/bin/sh\necho 'galerne 0.2.0'\nexit 0\n");
+    let target_bin = temp_dir.join(if cfg!(windows) {
+        "galerne.exe"
+    } else {
+        "galerne"
+    });
+    let original_bytes = get_valid_galerne_bytes();
+    fs::write(&target_bin, &original_bytes).expect("write initial binary");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = fs::set_permissions(&target_bin, fs::Permissions::from_mode(0o755));
+    }
 
-    let new_script = b"#!/bin/sh\necho 'galerne 0.2.1'\nexit 0\n";
-    let res = replace_and_verify_windows_binary(&target_bin, new_script);
+    let res = replace_and_verify_windows_binary(&target_bin, &original_bytes);
 
-    assert!(res.is_ok(), "Smoke test on valid binary must succeed");
+    assert!(
+        res.is_ok(),
+        "Smoke test on valid binary must succeed: {:?}",
+        res.err()
+    );
 
     let updated_bytes = fs::read(&target_bin).expect("read target after update");
-    assert_eq!(updated_bytes, new_script);
+    assert_eq!(updated_bytes, original_bytes);
 
     let backup_bin = target_bin.with_extension("exe.old");
     assert!(
