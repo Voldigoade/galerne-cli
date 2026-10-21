@@ -827,13 +827,6 @@ impl RunnerState {
                     continue;
                 }
                 if glyph == ' ' {
-                    buf.set_char(
-                        draw_x as u16,
-                        draw_y as u16,
-                        ' ',
-                        Color::Reset,
-                        Color::Black,
-                    );
                     continue;
                 }
                 let fg_color = match glyph {

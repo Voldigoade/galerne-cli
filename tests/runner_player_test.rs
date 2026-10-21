@@ -189,3 +189,89 @@ fn test_input_buffering_triggers_jump_on_landing() {
         }
     ));
 }
+
+#[test]
+fn traveler_action_sprites_keep_the_scarf_pack_and_readable_head() {
+    let actions = [
+        ActionState::Idle {
+            cycle_timer: 0.0,
+            frame: 0,
+        },
+        ActionState::Idle {
+            cycle_timer: 0.0,
+            frame: 1,
+        },
+        ActionState::Running {
+            cycle_timer: 0.0,
+            frame: 0,
+        },
+        ActionState::Running {
+            cycle_timer: 0.0,
+            frame: 1,
+        },
+        ActionState::Running {
+            cycle_timer: 0.0,
+            frame: 2,
+        },
+        ActionState::Running {
+            cycle_timer: 0.0,
+            frame: 3,
+        },
+        ActionState::Jumping {
+            phase: JumpPhase::Ascent,
+            vertical_velocity: -1.0,
+            elapsed_secs: 0.0,
+        },
+        ActionState::Jumping {
+            phase: JumpPhase::Apex,
+            vertical_velocity: 0.0,
+            elapsed_secs: 0.0,
+        },
+        ActionState::Jumping {
+            phase: JumpPhase::Descent,
+            vertical_velocity: 1.0,
+            elapsed_secs: 0.0,
+        },
+        ActionState::Jumping {
+            phase: JumpPhase::Landing,
+            vertical_velocity: 1.0,
+            elapsed_secs: 0.0,
+        },
+        ActionState::Gliding {
+            elapsed_secs: 0.0,
+            vertical_velocity: 0.0,
+        },
+        ActionState::Sliding {
+            remaining_secs: 0.2,
+        },
+        ActionState::Dashing {
+            remaining_secs: 0.1,
+        },
+        ActionState::Hit {
+            remaining_secs: 0.1,
+        },
+        ActionState::Activating {
+            remaining_secs: 0.1,
+        },
+        ActionState::Respawning {
+            remaining_secs: 0.1,
+        },
+    ];
+
+    let mut player = RunnerPlayer::new(10.0, 18.0);
+    for action in actions {
+        player.action = action;
+        let sprite = player.current_sprite();
+        let artwork = sprite.join("\n");
+
+        assert!(artwork.contains('~'), "Missing wind scarf in {action:?}");
+        assert!(artwork.contains("[#]"), "Missing travel pack in {action:?}");
+        let face = if matches!(action, ActionState::Hit { .. }) {
+            'x'
+        } else {
+            'o'
+        };
+        assert!(artwork.contains(face), "Missing face in {action:?}");
+        assert!(!artwork.contains("==>"), "Cursor-like arm in {action:?}");
+    }
+}

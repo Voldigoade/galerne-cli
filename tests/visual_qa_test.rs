@@ -128,6 +128,29 @@ fn restoring_the_line_does_not_invent_a_refuge_companion() {
 }
 
 #[test]
+fn player_sprite_negative_space_preserves_the_scene_behind_it() {
+    let mut game = RunnerState::new(30, 24, 0x12345678);
+    game.world.chunks.clear();
+
+    let mut buf = Buffer::new(30, 24);
+    for y in 0..buf.height() {
+        for x in 0..buf.width() {
+            buf.set_char(
+                x,
+                y,
+                '+',
+                galerne::terminal::buffer::Color::DarkGrey,
+                galerne::terminal::buffer::Color::Black,
+            );
+        }
+    }
+
+    game.render(&mut buf, Locale::En);
+
+    assert_eq!(buf.get(8, 13).unwrap().ch, '+');
+}
+
+#[test]
 fn test_visual_qa_running_frame() {
     let mut game = RunnerState::new(80, 24, 0x12345678);
     // Simulate 0.5s of running
@@ -174,7 +197,7 @@ fn test_visual_qa_jump_apex_frame() {
 
     let rendered = buffer_to_string(&buf);
     println!("--- VISUAL QA: JUMP APEX FRAME ---\n{}", rendered);
-    assert!(rendered.contains('^') || rendered.contains('>'));
+    assert!(rendered.contains("[#]") && rendered.contains('~'));
 }
 
 #[test]
@@ -223,6 +246,10 @@ fn test_visual_qa_large_terminal_236x53() {
     let rendered = buffer_to_string(&buf);
     let lines: Vec<&str> = rendered.lines().collect();
     assert_eq!(lines.len(), 53);
+    println!(
+        "--- VISUAL QA: SETTLEMENT APPROACH (236x53) ---\n{}",
+        rendered
+    );
 
     // Verify non-empty content across all vertical bands in 236x53
     // Sky band (rows 1..8)
