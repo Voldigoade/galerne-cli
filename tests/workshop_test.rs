@@ -50,3 +50,19 @@ fn test_max_level_clamping() {
     assert!(!purchased, "Cannot purchase beyond max level 5");
     assert_eq!(state.currency_shards, 1000);
 }
+
+#[test]
+fn test_apply_workshop_to_runner() {
+    let workshop = WorkshopLevels {
+        base_health_level: 2,
+        base_damage_level: 2,
+        move_speed_level: 2,
+        magnet_radius_level: 2,
+        shard_multiplier_level: 2,
+    };
+    let mut runner = galerne::game::runner::RunnerState::new(80, 24, 42);
+    galerne::storage::workshop::apply_workshop_to_runner(&workshop, &mut runner);
+    assert_eq!(runner.player.shields, 2); // 1 base + 1 from rank 2
+    assert!(runner.speed > 18.0);
+    assert!(runner.flow_multiplier > 1.0);
+}

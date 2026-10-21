@@ -7,9 +7,9 @@ use std::time::{Duration, Instant};
 
 use crossterm::event::{Event, KeyCode, KeyModifiers};
 
+use crate::game::rng::FastRng;
 use crate::game::runner::action::PlayerInput;
 use crate::game::runner::RunnerState;
-use crate::game::state::FastRng;
 use crate::shell::doctor::collect_diagnostics;
 use crate::storage::manager::SaveManager;
 use crate::storage::stats::format_career_stats;

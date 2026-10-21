@@ -1,7 +1,6 @@
 //! Permanent meta-progression upgrades purchased with Gale Shards.
 
 use crate::game::runner::RunnerState;
-use crate::game::state::GameState;
 use crate::storage::schema::{SaveState, WorkshopLevels};
 
 pub const MAX_WORKSHOP_LEVEL: u32 = 5;
@@ -131,26 +130,5 @@ pub fn apply_workshop_to_runner(workshop: &WorkshopLevels, runner: &mut RunnerSt
     }
     if workshop.shard_multiplier_level > 0 {
         runner.flow_multiplier += (workshop.shard_multiplier_level as f32) * 0.20;
-    }
-}
-
-/// Applies persistent workshop enhancements to an active game state.
-pub fn apply_workshop_to_game(workshop: &WorkshopLevels, game: &mut GameState) {
-    if workshop.base_health_level > 0 {
-        let bonus = (workshop.base_health_level as f32) * 15.0;
-        game.player.max_hp += bonus;
-        game.player.hp += bonus;
-    }
-    if workshop.base_damage_level > 0 {
-        let mult = 1.0 + (workshop.base_damage_level as f32) * 0.10;
-        game.weapon.damage *= mult;
-    }
-    if workshop.move_speed_level > 0 {
-        let mult = 1.0 + (workshop.move_speed_level as f32) * 0.08;
-        game.player.speed *= mult;
-    }
-    if workshop.magnet_radius_level > 0 {
-        let mult = 1.0 + (workshop.magnet_radius_level as f32) * 0.20;
-        game.player.magnet_radius *= mult;
     }
 }
