@@ -1,4 +1,4 @@
-# Galerne
+# ⚠️ Alpha Release - This is an alpha version, not yet a v1.
 
 An ultra-lightweight, persistent native Rust terminal game designed explicitly around developer wait times.
 
